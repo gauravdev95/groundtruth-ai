@@ -19,3 +19,7 @@ ai-service/*.egg-info/
 # Logs / OS
 *.log
 .DS_Store
+
+# Test / build caches
+.pytest_cache/
+*.tsbuildinfo
