@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  node:
+    name: Node — server + client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace=server
+      - run: npm run typecheck --workspace=client
+      - run: npm run lint --workspace=server --if-present
+      - run: npm run lint --workspace=client --if-present
+
+  python:
+    name: Python — ai-service
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r ai-service/requirements.txt
+      - run: python -m pytest ai-service/tests -q
+
+  infra:
+    name: Infra — compose + SQL sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate docker-compose config (skip gracefully if no docker)
+        run: |
+          if command -v docker >/dev/null 2>&1; then
+            docker compose config -q
+          else
+            echo "docker not available — skipping compose validation"
+          fi
+      - name: Validate SQL files
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          sql = Path("infra/postgres/001_init.sql").read_text()
+          assert "CREATE EXTENSION IF NOT EXISTS vector" in sql, "pgvector extension missing"
+          for table in ["users", "companies", "jobs", "candidates", "resumes",
+                        "certificates", "evidence_reports", "skills",
+                        "candidate_skills", "job_skills", "embeddings",
+                        "verification_results", "interviews", "matches",
+                        "applications"]:
+              assert f"CREATE TABLE IF NOT EXISTS {table}" in sql, f"table {table} missing"
+          assert "vector(1536)" in sql, "embedding vector(1536) missing"
+          assert "ivfflat" in sql, "ivfflat index missing"
+          seed = Path("infra/postgres/002_seed.sql").read_text()
+          assert "ON CONFLICT DO NOTHING" in seed, "seed is not idempotent"
+          print("SQL validation passed")
+          PY
