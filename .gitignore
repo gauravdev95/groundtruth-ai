@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Env / secrets
+.env
+.env.local
+*.local
+
+# Builds
+client/.next/
+client/out/
+server/dist/
+ai-service/*.egg-info/
+
+# Logs / OS
+*.log
+.DS_Store

@@ -1,0 +1,18 @@
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #0f172a; background: #f8fafc; }
+a { color: #2563eb; }
+.container { max-width: 960px; margin: 0 auto; padding: 2rem 1rem; }
+.hero { padding: 4rem 0 2rem; }
+.hero h1 { font-size: 2.75rem; line-height: 1.1; margin: 0 0 1rem; }
+.hero p { font-size: 1.15rem; color: #475569; max-width: 34rem; }
+.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 2rem 0; }
+.step { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; }
+.step h3 { margin: 0 0 0.5rem; }
+.step p { margin: 0; color: #475569; }
+.cta { display: inline-block; background: #2563eb; color: #fff; padding: 0.75rem 1.5rem; border-radius: 8px; text-decoration: none; font-weight: 600; }
+.job-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+.job-card h2 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+.job-card p { margin: 0.25rem 0; color: #475569; }
+.muted { color: #64748b; }
+.error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; padding: 1rem; }
