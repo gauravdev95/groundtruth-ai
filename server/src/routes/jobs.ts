@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../config/db";
 import { ApiError, asyncHandler } from "../middleware/errorHandler";
+import { requireAuth, requireRole } from "../middleware/auth";
 import { enqueueReembedding } from "../queues/jobs";
 
 const router = Router();
@@ -49,10 +50,12 @@ router.get(
   }),
 );
 
-// POST /api/jobs — create a job, then enqueue its embedding (202-style:
-// the job is created synchronously, the embedding is background work).
+// POST /api/jobs — recruiter/admin only (Phase 1: real role enforcement).
+// The job is created synchronously, the embedding is background work.
 router.post(
   "/",
+  requireAuth,
+  requireRole("recruiter", "admin"),
   asyncHandler(async (req, res) => {
     const parsed = createJobSchema.safeParse(req.body);
     if (!parsed.success) {

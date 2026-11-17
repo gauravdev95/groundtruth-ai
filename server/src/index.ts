@@ -4,6 +4,7 @@ import helmet from "helmet";
 import { env } from "./config/env";
 import { errorHandler } from "./middleware/errorHandler";
 import healthRouter from "./routes/health";
+import authRouter from "./routes/auth";
 import jobsRouter from "./routes/jobs";
 import candidatesRouter from "./routes/candidates";
 import uploadsRouter from "./routes/uploads";
@@ -15,6 +16,7 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
 app.use(healthRouter);
+app.use("/api/auth", authRouter);
 app.use("/api/jobs", jobsRouter);
 app.use("/api/candidates", candidatesRouter);
 app.use("/api/uploads", uploadsRouter);

@@ -13,8 +13,13 @@ export const env = {
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? "",
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY ?? "",
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET ?? "",
-  apiKey: process.env.API_KEY ?? "",
+  // JWT secret — REQUIRED in production. The server refuses to sign tokens
+  // without one (see services/auth.ts); a missing secret fails loudly
+  // instead of silently issuing tokens signed with a fallback.
   jwtSecret: process.env.JWT_SECRET ?? "",
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "1d",
+  // Public base URL of the client, used to build password-reset links.
+  frontendUrl: process.env.FRONTEND_URL ?? "http://localhost:3000",
   nodeEnv: process.env.NODE_ENV ?? "development",
 } as const;
 

@@ -8,6 +8,13 @@ Next.js 14 (App Router) + React 18 + TypeScript frontend.
   loop Verify → Interview → Match.
 - `/jobs` — live jobs list fetched from the server (`/api/jobs`), with
   loading, error, and empty states.
+- `/auth/login`, `/auth/signup` (student/recruiter role choice),
+  `/auth/forgot-password`, `/auth/reset-password` — auth pages in the
+  Stratify design system (light theme, `#1E2BDA`, Plus Jakarta Sans +
+  Manrope; see `src/app/auth/auth.css`).
+- `/account` — protected profile page (redirects to login when signed out);
+  role dashboards (`/student/dashboard`, `/recruiter/dashboard`) land in
+  Phase 2 — see `src/lib/dashboard-path.ts`.
 
 ## Develop
 
