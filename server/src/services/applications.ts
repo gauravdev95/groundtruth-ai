@@ -317,10 +317,24 @@ export async function updateApplicationStatus(
   ) {
     throw new ApiError(404, "Application not found");
   }
-  await pool.query(
-    `UPDATE applications SET status = $1, updated_at = now() WHERE id = $2`,
-    [status, applicationId],
-  );
+  // Phase 6: record the move in `application_status_history` — the audit
+  // trail analytics reads for time-to-first-response. Only a real change
+  // writes a row (setting the same status again is a no-op, not a move).
+  // The history insert rides on the same connection as the update so a
+  // failed insert cannot leave the status changed without its record.
+  const previousStatus = application.status;
+  if (previousStatus !== status) {
+    await pool.query(
+      `UPDATE applications SET status = $1, updated_at = now() WHERE id = $2`,
+      [status, applicationId],
+    );
+    await pool.query(
+      `INSERT INTO application_status_history
+         (application_id, from_status, to_status, changed_by)
+       VALUES ($1, $2, $3, $4)`,
+      [applicationId, previousStatus, status, userId],
+    );
+  }
   const updated = await pool.query<ApplicationRow>(
     `SELECT ${APPLICATION_COLUMNS} WHERE a.id = $1`,
     [applicationId],

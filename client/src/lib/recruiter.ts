@@ -246,3 +246,70 @@ export function updateApplicationStatus(
     body: JSON.stringify({ status }),
   });
 }
+
+// ── Phase 6: recruiter analytics ─────────────────────────────────────────
+
+export type AnalyticsStatus =
+  | "applied"
+  | "reviewing"
+  | "interview"
+  | "offer"
+  | "rejected"
+  | "withdrawn";
+
+export type FunnelStage = "applied" | "reviewing" | "interview" | "offer";
+
+export interface AnalyticsJobRow {
+  id: string;
+  title: string;
+  status: string;
+  created_at: string;
+  applications: number;
+  by_status: Record<AnalyticsStatus, number>;
+}
+
+export interface ActivityPoint {
+  date: string;
+  applications: number;
+  matches: number;
+}
+
+export interface RecruiterAnalytics {
+  company: { id: string; name: string } | null;
+  counts: {
+    jobs_total: number;
+    jobs_open: number;
+    jobs_closed: number;
+    jobs_draft: number;
+    applications: number;
+    matches: number;
+    interviews: number;
+    applicants: number;
+  };
+  by_status: Record<AnalyticsStatus, number>;
+  funnel: {
+    reached: Record<FunnelStage, number>;
+    conversion: {
+      applied_to_reviewing: number | null;
+      reviewing_to_interview: number | null;
+      interview_to_offer: number | null;
+    };
+  };
+  /** Average hours from application to first pipeline move, or null when
+   * no application has a recorded first move yet. */
+  avg_time_to_first_response_hours: number | null;
+  first_response_sample: number;
+  by_job: AnalyticsJobRow[];
+  activity: { window_days: number; series: ActivityPoint[] };
+  verification: {
+    applicants: number;
+    github_checked: number;
+    coding_profiles: number;
+    coding_verified: number;
+  };
+}
+
+/** Real aggregates over the recruiter's own company's jobs/applications. */
+export function fetchRecruiterAnalytics(): Promise<RecruiterAnalytics> {
+  return recruiterRequest<RecruiterAnalytics>("/api/recruiter/analytics");
+}

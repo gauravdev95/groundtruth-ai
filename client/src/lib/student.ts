@@ -92,6 +92,7 @@ export interface Resume {
   storage: "cloudinary" | "local";
   cloudinary_url: string | null;
   local_path: string | null;
+  extracted_text: string | null;
   created_at: string;
 }
 
@@ -104,6 +105,22 @@ export interface Completeness {
   percent: number;
   sections: Record<SectionKey, SectionStatus>;
   missing: SectionKey[];
+}
+
+export interface VerificationResult {
+  id: string;
+  source: string;
+  source_ref: string | null;
+  score: string | null;
+  result: Record<string, unknown>;
+  verified_at: string;
+}
+
+export interface EvidenceReport {
+  id: string;
+  title: string;
+  cloudinary_url: string;
+  created_at: string;
 }
 
 export interface GithubVerification {
@@ -123,6 +140,10 @@ export interface FullProfile {
   experience: Experience[];
   resumes: Resume[];
   github_verification: GithubVerification;
+  /** Latest verification row per source, or [] when no check ever ran. */
+  verification_results: VerificationResult[];
+  /** Stored evidence-report files, if any. */
+  evidence_reports: EvidenceReport[];
   completeness: Completeness;
 }
 

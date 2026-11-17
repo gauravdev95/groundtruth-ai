@@ -160,7 +160,14 @@ function DetailContent({ applicationId }: { applicationId: string }) {
           </>
         }
         sub={`Applied ${new Date(a.created_at).toLocaleDateString()} for ${a.job_title} at ${a.company_name ?? "your company"}. This is the student's own GroundTruth profile, read-only.`}
-        actions={<span className={statusChip(a.status)}>{a.status}</span>}
+        actions={
+          <>
+            <Link href={`/recruiter/applications/${a.id}/evidence`} className="st-btn st-btn-outline st-btn-sm">
+              View evidence
+            </Link>
+            <span className={statusChip(a.status)}>{a.status}</span>
+          </>
+        }
       />
 
       <div className="st-grid st-grid-2 st-section-gap">

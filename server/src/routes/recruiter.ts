@@ -10,6 +10,7 @@ import {
   loadRecruiterProfile,
   type CompanyRow,
 } from "../services/recruiter";
+import { loadRecruiterAnalytics } from "../services/analytics";
 import { listRecruiterApplications } from "../services/applications";
 
 const router = Router();
@@ -160,6 +161,19 @@ router.get(
   "/dashboard",
   asyncHandler(async (req, res) => {
     res.json(await loadRecruiterDashboard((req as AuthRequest).user!.sub));
+  }),
+);
+
+// GET /api/recruiter/analytics — real aggregates over the recruiter's
+// own company's jobs / applications / matches (Phase 6). Counts are 0,
+// conversions null and series zero-filled when there is nothing to
+// aggregate — never invented numbers.
+router.get(
+  "/analytics",
+  asyncHandler(async (req, res) => {
+    res.json(
+      await loadRecruiterAnalytics((req as AuthRequest).user!.sub),
+    );
   }),
 );
 

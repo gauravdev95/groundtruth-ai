@@ -100,6 +100,22 @@ export interface ResumeRow {
   created_at: string;
 }
 
+export interface VerificationResultRow {
+  id: string;
+  source: string;
+  source_ref: string | null;
+  score: string | null;
+  result: Record<string, unknown>;
+  verified_at: string;
+}
+
+export interface EvidenceReportRow {
+  id: string;
+  title: string;
+  cloudinary_url: string;
+  created_at: string;
+}
+
 export interface GithubVerification {
   /** Latest github-analysis result, if the worker has run for this candidate. */
   status: "not_checked" | "checked";
@@ -154,6 +170,13 @@ export interface FullProfile {
   experience: ExperienceRow[];
   resumes: ResumeRow[];
   github_verification: GithubVerification;
+  /** Latest verification row per source (github / coding_platform /
+   * certificate / interview), or [] when no check has ever run. The
+   * evidence view reads this — a source with no row is "not checked",
+   * never "verified". */
+  verification_results: VerificationResultRow[];
+  /** Stored evidence-report files, if any were uploaded. */
+  evidence_reports: EvidenceReportRow[];
   completeness: Completeness;
 }
 
@@ -334,7 +357,7 @@ export async function getOrCreateCandidateForUser(
 }
 
 export async function loadFullProfile(candidateId: string): Promise<FullProfile> {
-  const [candidateRes, skillsRes, projectsRes, codingRes, certsRes, expRes, resumesRes, ghRes] =
+  const [candidateRes, skillsRes, projectsRes, codingRes, certsRes, expRes, resumesRes, ghRes, verRes, reportsRes] =
     await Promise.all([
       pool.query<CandidateRow>("SELECT * FROM candidates WHERE id = $1", [candidateId]),
       pool.query<SkillRow>(
@@ -375,6 +398,18 @@ export async function loadFullProfile(candidateId: string): Promise<FullProfile>
          ORDER BY verified_at DESC LIMIT 1`,
         [candidateId],
       ),
+      // Phase 6: latest verification row per source, for the evidence view.
+      pool.query<VerificationResultRow>(
+        `SELECT DISTINCT ON (source) id, source, source_ref, score, result, verified_at
+         FROM verification_results WHERE candidate_id = $1
+         ORDER BY source, verified_at DESC`,
+        [candidateId],
+      ),
+      pool.query<EvidenceReportRow>(
+        `SELECT id, title, cloudinary_url, created_at FROM evidence_reports
+         WHERE candidate_id = $1 ORDER BY created_at DESC`,
+        [candidateId],
+      ),
     ]);
 
   const candidate = candidateRes.rows[0] as CandidateRow;
@@ -411,6 +446,8 @@ export async function loadFullProfile(candidateId: string): Promise<FullProfile>
           score: null,
           result: null,
         },
+    verification_results: verRes.rows,
+    evidence_reports: reportsRes.rows,
     completeness,
   };
 }

@@ -51,6 +51,12 @@ export function RecruiterShell({ children }: { children: ReactNode }) {
             <Link href="/recruiter/applications" className={linkClass("/recruiter/applications")}>
               Applications
             </Link>
+            <Link href="/recruiter/pipeline" className={linkClass("/recruiter/pipeline")}>
+              Pipeline
+            </Link>
+            <Link href="/recruiter/analytics" className={linkClass("/recruiter/analytics")}>
+              Analytics
+            </Link>
             <Link href="/recruiter/profile" className={linkClass("/recruiter/profile")}>
               Profile
             </Link>

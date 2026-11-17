@@ -2,7 +2,13 @@
 -- PostgreSQL 16 + pgvector. Relational records and dense embeddings in one DB.
 -- Run via docker-compose (mounted into /docker-entrypoint-initdb.d).
 
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- NOTE (Phase 6, 2026-11-17): `gen_random_uuid()` is built into
+-- PostgreSQL core since PG 13, so no pgcrypto functions are used anywhere
+-- in this schema. The old `CREATE EXTENSION "pgcrypto"` line was removed
+-- because it hard-fails `npm run migrate` on this VM's pgserver build,
+-- which ships no contrib modules (no pgcrypto.control anywhere on disk).
+-- Stock postgres:16 / docker-compose still works: gen_random_uuid() needs
+-- no extension there either.
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ── Users & organisations ────────────────────────────────────────────────
