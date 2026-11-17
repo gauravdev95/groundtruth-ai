@@ -7,6 +7,7 @@ import healthRouter from "./routes/health";
 import authRouter from "./routes/auth";
 import jobsRouter from "./routes/jobs";
 import candidatesRouter from "./routes/candidates";
+import studentRouter from "./routes/student";
 import uploadsRouter from "./routes/uploads";
 import { closeWorkers, workers } from "./workers";
 
@@ -19,6 +20,7 @@ app.use(healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/jobs", jobsRouter);
 app.use("/api/candidates", candidatesRouter);
+app.use("/api/student", studentRouter);
 app.use("/api/uploads", uploadsRouter);
 
 app.use(errorHandler);

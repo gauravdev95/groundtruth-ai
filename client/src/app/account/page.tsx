@@ -76,14 +76,18 @@ function AccountContent() {
       </div>
 
       <div className="st-form" style={{ marginTop: 24 }}>
-        <Link href="/jobs" className="st-btn st-btn-blue st-btn-block">
-          <Search size={17} aria-hidden="true" /> Browse open roles
+        <Link
+          href={isStudent ? "/student/dashboard" : "/jobs"}
+          className="st-btn st-btn-blue st-btn-block"
+        >
+          <Search size={17} aria-hidden="true" />{" "}
+          {isStudent ? "Go to my student dashboard" : "Browse open roles"}
           <ArrowRight size={17} aria-hidden="true" />
         </Link>
         <p className="st-hint" style={{ textAlign: "center" }}>
           {isStudent
-            ? "Your student dashboard — profile, evidence and applications — arrives in Phase 2."
-            : "Your recruiter dashboard — job posting and candidate review — arrives in Phase 2."}
+            ? "Your student dashboard — profile completeness, applications, matches and open roles — lives there."
+            : "Your recruiter dashboard — job posting and candidate review — arrives in a later phase."}
         </p>
       </div>
     </AuthShell>

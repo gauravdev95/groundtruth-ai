@@ -14,6 +14,7 @@ venv/
 client/.next/
 client/out/
 server/dist/
+server/uploads/
 ai-service/*.egg-info/
 
 # Logs / OS

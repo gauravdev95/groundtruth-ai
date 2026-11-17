@@ -31,6 +31,23 @@ npm run typecheck
 - `GET /api/jobs` / `GET /api/jobs/:id` / `POST /api/jobs` — jobs (Zod-validated).
   `POST /api/jobs` is recruiter/admin only (JWT + role guard).
 - `GET /api/candidates` / `GET /api/candidates/:id` / `POST /api/candidates`
+- `GET /api/student/profile` / `PUT /api/student/profile` — the signed-in
+  student's own profile (basic info + skills; completeness is computed
+  server-side on every read, never stored). `POST
+  /api/student/onboarding/choice` (resume_upload | manual_entry),
+  `PUT /api/student/profile/github` (handle existence is checked against
+  GitHub's public API; repo analysis is enqueued in the background),
+  `POST /api/student/profile/complete` (requires the mandatory sections:
+  basic, GitHub, ≥1 project). `POST /api/student/resume` (PDF, 10 MB;
+  Cloudinary when configured, otherwise stored under server/uploads/),
+  `GET /api/student/resume/:id/file` (own files only). CRUD for the
+  student's own rows: `POST/PUT/DELETE /api/student/projects`,
+  `/coding-profiles`, `/certificates`, `/experience`. `GET
+  /api/student/dashboard` — real counts + latest applications, matches and
+  open roles from the DB (0s and empty lists when there is nothing yet).
+  Every /api/student route requires a candidate-role JWT; rows are always
+  scoped to the logged-in student's candidate, so one student can never
+  read, edit or delete another's.
 - `POST /api/uploads` — multipart upload (`file` + `kind` in
   `resume | certificate | evidence-report`), 10 MB max, PDF/JPG/PNG only.
   Returns `secure_url` + `public_id` and a 202 `jobId` for background work.
