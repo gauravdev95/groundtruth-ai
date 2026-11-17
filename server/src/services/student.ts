@@ -118,6 +118,9 @@ export interface ApplicationRow {
   job_title: string;
   company_name: string | null;
   job_location: string | null;
+  /** Latest `matches.score` for this application, or null when the
+   * matching engine has not scored this pair (never invented). */
+  match_score: string | null;
 }
 
 export interface MatchRow {
@@ -430,10 +433,16 @@ export async function loadDashboard(candidateId: string): Promise<DashboardData>
   const [appsRes, matchesRes, jobsRes, countsRes] = await Promise.all([
     pool.query<ApplicationRow>(
       `SELECT a.id, a.status, a.created_at, j.id AS job_id, j.title AS job_title,
-              c.name AS company_name, j.location AS job_location
+              c.name AS company_name, j.location AS job_location,
+              m.score AS match_score
        FROM applications a
        JOIN jobs j ON j.id = a.job_id
        LEFT JOIN companies c ON c.id = j.company_id
+       LEFT JOIN LATERAL (
+         SELECT score FROM matches
+         WHERE candidate_id = a.candidate_id AND job_id = a.job_id
+         ORDER BY created_at DESC LIMIT 1
+       ) m ON true
        WHERE a.candidate_id = $1 ORDER BY a.created_at DESC LIMIT 5`,
       [candidateId],
     ),

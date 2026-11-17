@@ -4,6 +4,10 @@ import { pool } from "../config/db";
 import { ApiError, asyncHandler } from "../middleware/errorHandler";
 import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth";
 import { enqueueReembedding } from "../queues/jobs";
+import {
+  applyForJob,
+  listJobApplications,
+} from "../services/applications";
 
 const router = Router();
 
@@ -100,3 +104,47 @@ router.post(
 );
 
 export default router;
+
+// ── Applications (Phase 4) ───────────────────────────────────────────────
+
+// POST /api/jobs/:id/apply — candidate only. Creates the one application
+// this student may hold for this job (UNIQUE candidate_id, job_id); a
+// second apply is a 409. The job must be open.
+router.post(
+  "/:id/apply",
+  requireAuth,
+  requireRole("candidate"),
+  asyncHandler(async (req, res) => {
+    const user = (req as AuthRequest).user!;
+    const me = await pool.query<{ full_name: string }>(
+      "SELECT full_name FROM users WHERE id = $1",
+      [user.sub],
+    );
+    const application = await applyForJob(
+      user.sub,
+      user.email,
+      me.rows[0]?.full_name ?? "Student",
+      req.params.id,
+    );
+    res.status(201).json(application);
+  }),
+);
+
+// GET /api/jobs/:id/applications — recruiter/admin only, scoped to the
+// recruiter's own company's jobs (a recruiter asking for another
+// company's job gets a 404, never its applicants).
+router.get(
+  "/:id/applications",
+  requireAuth,
+  requireRole("recruiter", "admin"),
+  asyncHandler(async (req, res) => {
+    const user = (req as AuthRequest).user!;
+    res.json(
+      await listJobApplications(
+        user.sub,
+        req.params.id,
+        user.role === "admin",
+      ),
+    );
+  }),
+);

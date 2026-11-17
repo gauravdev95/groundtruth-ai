@@ -10,6 +10,7 @@ import {
   loadRecruiterProfile,
   type CompanyRow,
 } from "../services/recruiter";
+import { listRecruiterApplications } from "../services/applications";
 
 const router = Router();
 
@@ -159,6 +160,18 @@ router.get(
   "/dashboard",
   asyncHandler(async (req, res) => {
     res.json(await loadRecruiterDashboard((req as AuthRequest).user!.sub));
+  }),
+);
+
+// GET /api/recruiter/applications — every application across the
+// recruiter's own company's jobs, newest first, with the match score
+// when the matching engine has written one (null otherwise).
+router.get(
+  "/applications",
+  asyncHandler(async (req, res) => {
+    res.json(
+      await listRecruiterApplications((req as AuthRequest).user!.sub),
+    );
   }),
 );
 

@@ -16,6 +16,7 @@ import {
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { StudentPageHead, StudentShell } from "@/components/student/StudentShell";
 import { useAuth } from "@/lib/auth-context";
+import { formatMatchScore } from "@/lib/api";
 import {
   fetchDashboard,
   firstIncompleteStage,
@@ -239,7 +240,7 @@ function DashboardContent() {
               <Briefcase size={22} />
             </span>
             <h3>No applications yet</h3>
-            <p>You haven&apos;t applied to any role yet. The apply flow arrives in a later phase — for now, browse the open roles to see what&apos;s live.</p>
+            <p>You haven&apos;t applied to any role yet. Browse the open roles and apply — your applications show up here with their status.</p>
             <Link href="/jobs" className="st-btn st-btn-blue st-btn-sm">
               <Search size={15} aria-hidden="true" /> Browse open roles
             </Link>
@@ -250,6 +251,7 @@ function DashboardContent() {
               <tr>
                 <th>Role</th>
                 <th>Company</th>
+                <th>Match</th>
                 <th>Status</th>
                 <th>Applied</th>
               </tr>
@@ -261,6 +263,7 @@ function DashboardContent() {
                     <Link href={`/jobs/${a.job_id}`}>{a.job_title}</Link>
                   </td>
                   <td>{a.company_name ?? "—"}</td>
+                  <td>{formatMatchScore(a.match_score) ?? "No score yet"}</td>
                   <td>
                     <span className="st-chip st-chip-blue">{a.status}</span>
                   </td>

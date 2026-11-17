@@ -21,6 +21,7 @@ import {
   fetchRecruiterDashboard,
   type RecruiterDashboardData,
 } from "@/lib/recruiter";
+import { formatMatchScore } from "@/lib/api";
 
 function StatCard({
   num,
@@ -91,9 +92,14 @@ function DashboardContent() {
         }
         sub="Real numbers from your jobs and applications. Nothing here is a placeholder — an empty section means there is nothing in the database yet."
         actions={
-          <Link href="/recruiter/profile" className="st-btn st-btn-outline">
-            <UserRound size={16} aria-hidden="true" /> View profile
-          </Link>
+          <>
+            <Link href="/recruiter/jobs/new" className="st-btn st-btn-blue">
+              Post a job
+            </Link>
+            <Link href="/recruiter/profile" className="st-btn st-btn-outline">
+              <UserRound size={16} aria-hidden="true" /> View profile
+            </Link>
+          </>
         }
       />
 
@@ -111,7 +117,7 @@ function DashboardContent() {
             <div>
               <h2>Company profile</h2>
               <p className="st-panel-desc">
-                What candidates see about your company. Job posting arrives in the next phase.
+                What candidates see about your company. Post a role any time — it goes live on the job board under this company.
               </p>
             </div>
             <span className="st-panel-icon" aria-hidden="true">
@@ -230,9 +236,9 @@ function DashboardContent() {
               <Briefcase size={22} />
             </span>
             <h3>No jobs posted yet</h3>
-            <p>You haven&apos;t posted any roles yet. The job-posting form arrives in the next phase — for now, you can see the live job board to check what&apos;s out there.</p>
-            <Link href="/jobs" className="st-btn st-btn-blue st-btn-sm">
-              Browse the job board <ArrowRight size={15} aria-hidden="true" />
+            <p>You haven&apos;t posted any roles yet. Post your first role — it goes live on the job board immediately, under your company.</p>
+            <Link href="/recruiter/jobs/new" className="st-btn st-btn-blue st-btn-sm">
+              Post a job <ArrowRight size={15} aria-hidden="true" />
             </Link>
           </div>
         ) : (
@@ -268,11 +274,11 @@ function DashboardContent() {
         <div className="st-panel-head">
           <div>
             <h2>Recent applications</h2>
-            <p className="st-panel-desc">The latest candidates who applied to your roles. The full pipeline arrives in a later phase.</p>
+            <p className="st-panel-desc">The latest candidates who applied to your roles. Open any row to see the applicant&apos;s full profile and move them through your pipeline.</p>
           </div>
-          <span className="st-panel-icon" aria-hidden="true">
-            <Users size={20} />
-          </span>
+          <Link href="/recruiter/applications" className="st-btn st-btn-outline st-btn-sm">
+            View all <ArrowRight size={15} aria-hidden="true" />
+          </Link>
         </div>
         {applications.length === 0 ? (
           <div className="st-empty-inline">
@@ -288,6 +294,7 @@ function DashboardContent() {
               <tr>
                 <th>Candidate</th>
                 <th>Role</th>
+                <th>Match</th>
                 <th>Status</th>
                 <th>Applied</th>
               </tr>
@@ -296,12 +303,15 @@ function DashboardContent() {
               {applications.map((a) => (
                 <tr key={a.id}>
                   <td>
-                    <strong>{a.candidate_name}</strong>
+                    <Link href={`/recruiter/applications/${a.id}`}>
+                      <strong>{a.candidate_name}</strong>
+                    </Link>
                     {a.candidate_headline ? <div style={{ color: "var(--muted)", fontSize: 13 }}>{a.candidate_headline}</div> : null}
                   </td>
                   <td>
                     <Link href={`/jobs/${a.job_id}`}>{a.job_title}</Link>
                   </td>
+                  <td>{formatMatchScore(a.match_score) ?? "No score yet"}</td>
                   <td>
                     <span className="st-chip st-chip-blue">{a.status}</span>
                   </td>

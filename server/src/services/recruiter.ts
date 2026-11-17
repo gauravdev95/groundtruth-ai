@@ -266,6 +266,9 @@ export interface RecruiterApplicationRow {
   candidate_id: string;
   candidate_name: string;
   candidate_headline: string | null;
+  /** Latest `matches.score` for this candidate+job, or null when the
+   * matching engine has not scored this pair (never invented). */
+  match_score: string | null;
 }
 
 export interface RecruiterDashboardData {
@@ -328,10 +331,16 @@ export async function loadRecruiterDashboard(
     ),
     pool.query<RecruiterApplicationRow>(
       `SELECT a.id, a.status, a.created_at, j.id AS job_id, j.title AS job_title,
-              c.id AS candidate_id, c.full_name AS candidate_name, c.headline AS candidate_headline
+              c.id AS candidate_id, c.full_name AS candidate_name, c.headline AS candidate_headline,
+              m.score AS match_score
        FROM applications a
        JOIN jobs j ON j.id = a.job_id
        JOIN candidates c ON c.id = a.candidate_id
+       LEFT JOIN LATERAL (
+         SELECT score FROM matches
+         WHERE candidate_id = a.candidate_id AND job_id = a.job_id
+         ORDER BY created_at DESC LIMIT 1
+       ) m ON true
        WHERE j.company_id = $1 ORDER BY a.created_at DESC LIMIT 5`,
       [companyId],
     ),

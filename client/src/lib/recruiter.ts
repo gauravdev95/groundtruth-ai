@@ -85,6 +85,9 @@ export interface RecruiterApplication {
   candidate_id: string;
   candidate_name: string;
   candidate_headline: string | null;
+  /** Latest `matches.score` for this candidate+job, or null when the
+   * matching engine has not scored this pair (never invented). */
+  match_score: string | null;
 }
 
 export interface RecruiterDashboardData {
@@ -147,4 +150,99 @@ export function updateRecruiterProfile(
 
 export function fetchRecruiterDashboard(): Promise<RecruiterDashboardData> {
   return recruiterRequest<RecruiterDashboardData>("/api/recruiter/dashboard");
+}
+
+export type EmploymentType = "full_time" | "part_time" | "contract" | "internship";
+
+export const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
+  { value: "full_time", label: "Full-time" },
+  { value: "part_time", label: "Part-time" },
+  { value: "contract", label: "Contract" },
+  { value: "internship", label: "Internship" },
+];
+
+export function employmentTypeLabel(value: string | null): string {
+  return (
+    EMPLOYMENT_TYPE_OPTIONS.find((o) => o.value === value)?.label ??
+    value?.replace("_", " ") ??
+    "—"
+  );
+}
+
+export interface PostJobInput {
+  company_id: string;
+  title: string;
+  description: string;
+  location?: string | null;
+  employment_type?: EmploymentType;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string;
+}
+
+/** Post a job under the recruiter's own company (server enforces ownership). */
+export function postJob(input: PostJobInput): Promise<Job> {
+  return recruiterRequest<Job>("/api/jobs", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface Job {
+  id: string;
+  company_id: string;
+  title: string;
+  description: string;
+  location: string | null;
+  employment_type: string;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Every application across the recruiter's own company's jobs. */
+export function fetchRecruiterApplications(): Promise<
+  import("./api").Application[]
+> {
+  return recruiterRequest<import("./api").Application[]>(
+    "/api/recruiter/applications",
+  );
+}
+
+/** One application + the applicant's full student profile (read-only). */
+export function fetchApplicationDetail(id: string): Promise<{
+  application: import("./api").Application;
+  profile: import("./student").FullProfile;
+}> {
+  return recruiterRequest(`/api/applications/${encodeURIComponent(id)}`);
+}
+
+export type RecruiterApplicationStatus =
+  | "reviewing"
+  | "interview"
+  | "offer"
+  | "rejected";
+
+export const RECRUITER_STATUS_OPTIONS: {
+  value: RecruiterApplicationStatus;
+  label: string;
+}[] = [
+  { value: "reviewing", label: "Reviewing" },
+  { value: "interview", label: "Interview" },
+  { value: "offer", label: "Offer" },
+  { value: "rejected", label: "Rejected" },
+];
+
+/** Move an application through the pipeline. */
+export function updateApplicationStatus(
+  id: string,
+  status: RecruiterApplicationStatus,
+): Promise<import("./api").Application> {
+  return recruiterRequest(`/api/applications/${encodeURIComponent(id)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
 }

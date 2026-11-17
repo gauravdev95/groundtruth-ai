@@ -134,6 +134,9 @@ export interface DashboardApplication {
   job_title: string;
   company_name: string | null;
   job_location: string | null;
+  /** Latest `matches.score` for this application, or null when the
+   * matching engine has not scored this pair (never invented). */
+  match_score: string | null;
 }
 
 export interface DashboardMatch {
