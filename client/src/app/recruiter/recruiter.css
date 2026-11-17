@@ -1,0 +1,30 @@
+/* ── Stratify design system — recruiter scope ───────────────────────────
+   Same tokens as the approved landing page / auth pages / student pages:
+   Plus Jakarta Sans headings + Manrope body, royal blue #1E2BDA / #2F4BFF,
+   near-black #08080A headlines, pale lavender-grey gradient, white cards,
+   soft blue shadows. Scoped under .st-recruiter; shared panels, grids,
+   tables, buttons and inputs come from auth.css + student.css (imported
+   by the recruiter layout). */
+
+.st-recruiter {
+  min-height: 100vh;
+  font-family: var(--font-manrope), "Manrope", system-ui, sans-serif;
+  color: var(--ink);
+  background: linear-gradient(180deg, #fff 0%, #f3f3fa 38%, #eef0ff 62%, #f7f7fc 100%);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.st-recruiter h1,
+.st-recruiter h2,
+.st-recruiter h3 {
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", sans-serif;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.st-recruiter p { margin: 0; }
+.st-recruiter a { color: inherit; text-decoration: none; }
+.st-recruiter button { font: inherit; }

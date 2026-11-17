@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../config/db";
 import { ApiError, asyncHandler } from "../middleware/errorHandler";
-import { requireAuth, requireRole } from "../middleware/auth";
+import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth";
 import { enqueueReembedding } from "../queues/jobs";
 
 const router = Router();
@@ -51,6 +51,11 @@ router.get(
 );
 
 // POST /api/jobs — recruiter/admin only (Phase 1: real role enforcement).
+// Phase 3: a recruiter may only post under their OWN company — the row
+// created at registration (companies.created_by) or linked on their
+// recruiter profile. Posting under another company's id is a 403, so one
+// recruiter can never publish as another company. Admins may post for
+// any company (they have no company of their own).
 // The job is created synchronously, the embedding is background work.
 router.post(
   "/",
@@ -62,6 +67,21 @@ router.post(
       throw new ApiError(400, `Invalid job: ${parsed.error.issues[0]?.message ?? "validation failed"}`);
     }
     const d = parsed.data;
+    if ((req as AuthRequest).user?.role === "recruiter") {
+      const userId = (req as AuthRequest).user!.sub;
+      const owned = await pool.query(
+        `SELECT id FROM companies WHERE id = $1
+          AND (created_by = $2
+               OR id IN (SELECT company_id FROM recruiter_profiles WHERE user_id = $2))`,
+        [d.company_id, userId],
+      );
+      if (owned.rows.length === 0) {
+        throw new ApiError(
+          403,
+          "You can only post jobs for your own company — complete your company profile first.",
+        );
+      }
+    }
     const { rows } = await pool.query(
       `INSERT INTO jobs (company_id, title, description, location, employment_type,
          salary_min, salary_max, salary_currency)

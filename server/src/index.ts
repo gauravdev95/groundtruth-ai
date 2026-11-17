@@ -8,6 +8,7 @@ import authRouter from "./routes/auth";
 import jobsRouter from "./routes/jobs";
 import candidatesRouter from "./routes/candidates";
 import studentRouter from "./routes/student";
+import recruiterRouter from "./routes/recruiter";
 import uploadsRouter from "./routes/uploads";
 import { closeWorkers, workers } from "./workers";
 
@@ -21,6 +22,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/jobs", jobsRouter);
 app.use("/api/candidates", candidatesRouter);
 app.use("/api/student", studentRouter);
+app.use("/api/recruiter", recruiterRouter);
 app.use("/api/uploads", uploadsRouter);
 
 app.use(errorHandler);
