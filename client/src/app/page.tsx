@@ -549,8 +549,8 @@ export default function Home() {
           <a href="#platform">Product</a><a href="#platform">Solutions</a><a href="#integrations">Resources</a><a href="#pricing">Pricing</a>
         </div>
         <div className="nav-actions">
-          <a className="btn btn-outline" href="#pricing">Sign In</a>
-          <a className="btn btn-blue" href="#pricing">Get Started</a>
+          <a className="btn btn-outline" href="/auth/login">Sign In</a>
+          <a className="btn btn-blue" href="/auth/signup">Get Started</a>
           <button className="menu-btn" id="menuBtn" aria-label="Menu" onClick={() => setMenuOpen((v) => !v)}>☰</button>
         </div>
       </nav>
@@ -579,7 +579,7 @@ export default function Home() {
         </div>
         <p className="hero-sub">Every skill backed by real evidence — GitHub,<br />coding records &amp; a code-grounded AI interview.</p>
         <div className="hero-cta">
-          <a className="btn btn-blue" href="#pricing">Get Started</a>
+          <a className="btn btn-blue" href="/auth/signup">Get Started</a>
           <a className="btn btn-ghost" href="#dashboard">Watch Demo <span className="play">▶</span></a>
         </div>
         <div className="faint-nums"><span data-count="5298">5,298</span><span data-count="9371">9,371</span></div>
