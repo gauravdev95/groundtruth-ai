@@ -9,7 +9,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 export type SectionKey =
   | "basic"
-  | "github"
   | "projects"
   | "coding"
   | "certificates"
@@ -36,6 +35,7 @@ export interface Candidate {
   onboarding_choice: "resume_upload" | "manual_entry" | null;
   onboarding_completed_at: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Skill {
@@ -434,7 +434,10 @@ export function deleteExperience(id: string): Promise<void> {
   });
 }
 
-// ── Onboarding stages (old repo's eight stages, same slugs/order) ────────
+// ── Onboarding stages (seven stages + Profile Complete) ───────────────
+// GitHub was removed as a stage: it is a plain optional text field on the
+// profile page only, with no verification. The single project is the
+// only mandatory stage after Basic info.
 
 export interface OnboardingStage {
   slug: string;
@@ -447,13 +450,13 @@ export interface OnboardingStage {
 
 export const ONBOARDING_STAGES: readonly OnboardingStage[] = [
   { slug: "", label: "Get started", percent: 0, isMandatory: true, section: null },
-  { slug: "basic-info", label: "Basic info", percent: 15, isMandatory: true, section: "basic" },
-  { slug: "github", label: "GitHub", percent: 30, isMandatory: true, section: "github" },
-  { slug: "projects", label: "Projects", percent: 50, isMandatory: true, section: "projects" },
-  { slug: "coding-profile", label: "Coding profile", percent: 65, isMandatory: false, section: "coding" },
-  { slug: "certificates", label: "Certificates", percent: 80, isMandatory: false, section: "certificates" },
+  { slug: "basic-info", label: "Basic info", percent: 18, isMandatory: true, section: "basic" },
+  { slug: "projects", label: "Your project", percent: 40, isMandatory: true, section: "projects" },
+  { slug: "coding-profile", label: "Coding profile", percent: 60, isMandatory: false, section: "coding" },
+  { slug: "certificates", label: "Certificates", percent: 78, isMandatory: false, section: "certificates" },
   { slug: "experience", label: "Experience", percent: 90, isMandatory: false, section: "experience" },
   { slug: "review", label: "Review & submit", percent: 100, isMandatory: true, section: null },
+  { slug: "complete", label: "Profile Complete", percent: 100, isMandatory: true, section: null },
 ];
 
 export function stagePath(stage: OnboardingStage): string {
@@ -475,13 +478,207 @@ export function previousStage(stage: OnboardingStage): OnboardingStage | undefin
 
 /** First stage whose section is not done yet (or review when all are done). */
 export function firstIncompleteStage(profile: FullProfile): OnboardingStage {
-  const order: SectionKey[] = ["basic", "github", "projects", "coding", "certificates", "experience"];
+  const order: SectionKey[] = ["basic", "projects", "coding", "certificates", "experience"];
   for (const key of order) {
     if (!profile.completeness.sections[key].done) {
       return ONBOARDING_STAGES.find((s) => s.section === key) as OnboardingStage;
     }
   }
-  return ONBOARDING_STAGES[ONBOARDING_STAGES.length - 1] as OnboardingStage;
+  return ONBOARDING_STAGES[ONBOARDING_STAGES.length - 2] as OnboardingStage;
+}
+
+// ── Profile Strength ("Improve your profile") ────────────────────────────
+// Built only from the server's completeness response — the score is the
+// server's percent, never invented, and every item is a section the
+// server says is missing, with exactly what to add and where to add it.
+// Completing an item changes the server response, which raises the score.
+
+export interface ImproveItem {
+  key: SectionKey;
+  label: string;
+  /** Exactly what to add. Comes from the server's section detail. */
+  action: string;
+  /** Points this section is worth (server weights). */
+  points: number;
+  href: string;
+}
+
+const IMPROVE_META: Record<
+  SectionKey,
+  { label: string; points: number; href: string }
+> = {
+  basic: { label: "Basic info", points: 35, href: "/student/onboarding/basic-info" },
+  projects: { label: "Your project", points: 35, href: "/student/onboarding/projects" },
+  coding: { label: "Coding profile", points: 10, href: "/student/onboarding/coding-profile" },
+  certificates: { label: "Certificates", points: 5, href: "/student/onboarding/certificates" },
+  experience: { label: "Experience", points: 15, href: "/student/onboarding/experience" },
+};
+
+export function improveProfileItems(profile: FullProfile): ImproveItem[] {
+  return profile.completeness.missing.map((key) => ({
+    key,
+    label: IMPROVE_META[key].label,
+    action: profile.completeness.sections[key].detail,
+    points: IMPROVE_META[key].points,
+    href: IMPROVE_META[key].href,
+  }));
+}
+
+// ── Online AI Monitoring ─────────────────────────────────────────────────
+// Derived ONLY from real stored data already on the profile: the single
+// project, coding profiles, certificates, resume, GitHub username and the
+// server completeness score. No live feed, no invented activity, no fake
+// scores. "Last checked" is the most recent real change to the profile
+// (candidate.updated_at or the newest evidence row). Status is "live"
+// once onboarding is complete, "paused" until then — both from real data.
+
+export interface MonitoringFinding {
+  severity: "action" | "info";
+  title: string;
+  detail: string;
+  href?: string;
+}
+
+export interface AiMonitoring {
+  status: "live" | "paused";
+  /** ISO timestamp of the most recent real profile/evidence change. */
+  lastCheckedAt: string;
+  findings: MonitoringFinding[];
+}
+
+export function aiMonitoring(profile: FullProfile): AiMonitoring {
+  const c = profile.candidate;
+  const findings: MonitoringFinding[] = [];
+  const project = profile.projects[0];
+
+  if (!project) {
+    findings.push({
+      severity: "action",
+      title: "No project on your profile",
+      detail: "Add your one selected project — it is the main evidence recruiters and the monitor check.",
+      href: "/student/onboarding/projects",
+    });
+  } else {
+    if (!project.description?.trim()) {
+      findings.push({
+        severity: "action",
+        title: "Your project has no description",
+        detail: `"${project.title}" says nothing about what you built. Add a short description so it can be checked.`,
+        href: "/student/profile",
+      });
+    }
+    if (project.technologies.length === 0) {
+      findings.push({
+        severity: "action",
+        title: "Your project lists no technologies",
+        detail: `"${project.title}" has no technologies tagged — add the stack you used.`,
+        href: "/student/profile",
+      });
+    }
+    if (project.kind === "repository" && !project.repo_url) {
+      findings.push({
+        severity: "action",
+        title: "Repository project without a repo link",
+        detail: `"${project.title}" is marked as a linked repository but has no repository URL.`,
+        href: "/student/profile",
+      });
+    }
+    const end = project.ended_at ? new Date(project.ended_at) : null;
+    if (end && Date.now() - end.getTime() > 365 * 24 * 60 * 60 * 1000) {
+      findings.push({
+        severity: "info",
+        title: "Your project ended over a year ago",
+        detail: `"${project.title}" ended ${end.toLocaleDateString()}. Replace it with a more recent project to keep your evidence fresh.`,
+        href: "/student/profile",
+      });
+    }
+  }
+
+  if (profile.coding_profiles.length === 0) {
+    findings.push({
+      severity: "action",
+      title: "No coding profile linked",
+      detail: "Link a LeetCode, Codeforces or CodeChef profile — coding evidence is checked here when it exists.",
+      href: "/student/onboarding/coding-profile",
+    });
+  } else {
+    for (const cp of profile.coding_profiles) {
+      if (cp.verification_status !== "verified") {
+        findings.push({
+          severity: "info",
+          title: `${platformLabel(cp.platform)} profile not verified yet`,
+          detail: `${cp.username} is recorded with status "${cp.verification_status}" — no live check has confirmed it yet.`,
+          href: "/student/profile",
+        });
+      }
+    }
+  }
+
+  if (profile.certificates.length === 0) {
+    findings.push({
+      severity: "info",
+      title: "No certificate on file",
+      detail: "Add a certificate if you have one — it strengthens the evidence the monitor can check.",
+      href: "/student/onboarding/certificates",
+    });
+  } else {
+    for (const cert of profile.certificates) {
+      if (!cert.credential_url) {
+        findings.push({
+          severity: "info",
+          title: `Certificate without a verification link: ${cert.title}`,
+          detail: "Add its credential URL so the certificate can be checked.",
+          href: "/student/profile",
+        });
+      }
+    }
+  }
+
+  if (!c.github_handle) {
+    findings.push({
+      severity: "info",
+      title: "GitHub username not added (optional)",
+      detail: "You can add a GitHub username on your profile — it is shown as plain text and is not verified.",
+      href: "/student/profile",
+    });
+  }
+
+  if (profile.resumes.length === 0) {
+    findings.push({
+      severity: "info",
+      title: "No resume uploaded",
+      detail: "Upload a PDF resume so recruiters have the full document alongside your evidence.",
+      href: "/student/onboarding",
+    });
+  }
+
+  if (profile.completeness.percent < 100) {
+    findings.push({
+      severity: "action",
+      title: `Profile strength is ${profile.completeness.percent}%`,
+      detail: `${profile.completeness.missing.length} section${profile.completeness.missing.length === 1 ? "" : "s"} still to fill — each one you complete raises your strength score.`,
+      href: "/student/profile",
+    });
+  }
+
+  const stamps: number[] = [new Date(c.updated_at).getTime()];
+  for (const row of [
+    ...profile.projects,
+    ...profile.coding_profiles,
+    ...profile.certificates,
+    ...profile.experience,
+    ...profile.resumes,
+  ]) {
+    const t = new Date((row as { created_at: string }).created_at).getTime();
+    if (Number.isFinite(t)) stamps.push(t);
+  }
+  const lastCheckedAt = new Date(Math.max(...stamps)).toISOString();
+
+  return {
+    status: c.onboarding_completed_at ? "live" : "paused",
+    lastCheckedAt,
+    findings,
+  };
 }
 
 export const DEGREE_OPTIONS = [

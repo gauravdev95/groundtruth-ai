@@ -84,7 +84,7 @@ function ChooseContent() {
             Let&apos;s build your <span className="blue">verified profile.</span>
           </>
         }
-        sub="Eight short stages. The first three — basic info, GitHub and one project — are required; coding profiles, certificates and experience are optional and can be skipped."
+        sub="Seven short stages. The first two — basic info and your one project — are required; coding profiles, certificates and experience are optional and can be skipped."
       />
       <OnboardingStepper current={stage} doneSections={doneSections} />
       <div style={{ marginTop: 18 }}>

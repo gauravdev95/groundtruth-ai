@@ -225,8 +225,10 @@ export function BasicInfoForm({
   );
 }
 
-// ── GitHub ─────────────────────────────────────────────────────────────────
-
+// ── GitHub (plain optional text field) ─────────────────────────────────────
+// The username is saved as plain text only. It is NOT checked against
+// GitHub, shows no verified/unverified badge, and triggers no background
+// verification worker. The profile page displays it as a link, nothing more.
 export function GithubForm({
   profile,
   onSaved,
@@ -256,55 +258,29 @@ export function GithubForm({
     }
   }
 
-  const exists = c.github_handle_exists;
-  const verification = profile.github_verification;
-  const result = verification.result as { file_count?: number } | null;
-
   return (
     <form onSubmit={onSubmit} className="st-form">
       <FormError message={error} />
       {saved ? (
         <div className="st-alert st-alert-success" role="status">
           <CheckCircle2 size={17} aria-hidden="true" />
-          <span>GitHub account saved.</span>
+          <span>GitHub username saved.</span>
         </div>
       ) : null}
-      <Field label="GitHub username or profile URL" hint="We check the handle against GitHub's public directory and queue a repo analysis — nothing is marked verified until that analysis runs.">
+      <Field label="GitHub username (optional)" hint="Just a link on your profile — we don't verify it here. Leave it blank if you don't want to show one.">
         <span style={{ position: "relative", display: "block" }}>
           <Github size={16} aria-hidden="true" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--muted2)" }} />
-          <input className={inputClassName()} style={{ paddingLeft: 40 }} value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="octocat or https://github.com/octocat" required />
+          <input className={inputClassName()} style={{ paddingLeft: 40 }} value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="octocat or https://github.com/octocat" />
         </span>
       </Field>
       <div>
         <button type="submit" className="st-btn st-btn-blue" disabled={busy}>
-          {busy ? "Checking GitHub…" : "Save & check GitHub"}
+          {busy ? "Saving…" : "Save GitHub username"}
         </button>
       </div>
       {c.github_handle ? (
         <div className="st-note">
-          <strong>GitHub handle:</strong> {c.github_handle} —{" "}
-          {exists === true ? (
-            <span className="st-chip st-chip-green">Handle found on GitHub</span>
-          ) : exists === false ? (
-            <span className="st-chip st-chip-amber">No GitHub user with this handle — check the spelling</span>
-          ) : (
-            <span className="st-chip st-chip-grey">GitHub could not be reached — saved, not checked</span>
-          )}
-          <br />
-          {verification.status === "checked" ? (
-            <>
-              <strong>Repo analysis:</strong> ran{" "}
-              {verification.verified_at ? new Date(verification.verified_at).toLocaleString() : "recently"}
-              {result?.file_count !== undefined ? ` · ${result.file_count} files analysed` : ""}
-              {verification.score !== null ? ` · score ${verification.score}` : ""}.
-            </>
-          ) : (
-            <>
-              <strong>Repo analysis:</strong> hasn&apos;t run yet — it starts in the
-              background when you save your GitHub account, and the result
-              appears here.
-            </>
-          )}
+          <strong>GitHub:</strong> {c.github_handle} — shown on your profile as a plain link.
         </div>
       ) : null}
     </form>

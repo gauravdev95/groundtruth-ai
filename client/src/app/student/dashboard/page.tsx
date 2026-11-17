@@ -5,22 +5,21 @@ import Link from "next/link";
 import {
   ArrowRight,
   Briefcase,
-  CheckCircle2,
-  Circle,
   FileText,
-  Github,
   Search,
   Target,
   UserRound,
 } from "lucide-react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { StudentPageHead, StudentShell } from "@/components/student/StudentShell";
+import {
+  AiMonitoringCard,
+  ProfileStrengthCard,
+} from "@/components/student/ProfileStrength";
 import { useAuth } from "@/lib/auth-context";
 import { formatMatchScore } from "@/lib/api";
 import {
   fetchDashboard,
-  firstIncompleteStage,
-  stagePath,
   type DashboardData,
 } from "@/lib/student";
 
@@ -80,16 +79,7 @@ function DashboardContent() {
   const c = profile.candidate;
   const completeness = profile.completeness;
   const firstName = (user?.full_name ?? c.full_name).trim().split(/\s+/)[0] ?? "there";
-  const nextStage = firstIncompleteStage(profile);
   const done = completeness.percent === 100;
-  const sectionOrder = [
-    { key: "basic", label: "Basic info" },
-    { key: "github", label: "GitHub" },
-    { key: "projects", label: "Projects" },
-    { key: "coding", label: "Coding profile" },
-    { key: "certificates", label: "Certificates" },
-    { key: "experience", label: "Experience" },
-  ] as const;
 
   return (
     <>
@@ -116,111 +106,11 @@ function DashboardContent() {
       </div>
 
       <div className="st-grid st-grid-2 st-section-gap">
-        {/* Completeness */}
-        <section className="st-panel" aria-label="Profile completeness">
-          <div className="st-panel-head">
-            <div>
-              <h2>Profile completeness</h2>
-              <p className="st-panel-desc">
-                {c.onboarding_completed_at
-                  ? `Onboarding completed on ${new Date(c.onboarding_completed_at).toLocaleDateString()}. You can still edit every section from your profile.`
-                  : "Finish onboarding to become visible to recruiters. Skipping the optional stages still completes onboarding — at 75%, not 100%."}
-              </p>
-            </div>
-            <span className="st-panel-icon" aria-hidden="true">
-              <Target size={20} />
-            </span>
-          </div>
-          <div className="st-meter-row">
-            <span className="st-meter-pct">{completeness.percent}%</span>
-            <span className="st-stat-label">
-              {done ? "Complete" : `${completeness.missing.length} to go`}
-            </span>
-          </div>
-          <div className="st-meter" role="progressbar" aria-valuenow={completeness.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completeness">
-            <div className="st-meter-fill" style={{ width: `${completeness.percent}%` }} />
-          </div>
-          <div className="st-check-list">
-            {sectionOrder.map(({ key, label }) => {
-              const section = completeness.sections[key];
-              return (
-                <span key={key} className={`st-check-item${section.done ? " done" : " pending"}`}>
-                  {section.done ? <CheckCircle2 size={16} aria-hidden="true" /> : <Circle size={16} aria-hidden="true" />}
-                  <span>
-                    <strong>{label}</strong> — {section.detail}
-                  </span>
-                </span>
-              );
-            })}
-          </div>
-          {!done ? (
-            <div style={{ marginTop: 20 }}>
-              <Link href={stagePath(nextStage)} className="st-btn st-btn-blue">
-                Continue: {nextStage.label} <ArrowRight size={16} aria-hidden="true" />
-              </Link>
-            </div>
-          ) : null}
-        </section>
+        {/* Profile strength (real server score + what to improve) */}
+        <ProfileStrengthCard profile={profile} />
 
-        {/* GitHub verification */}
-        <section className="st-panel" aria-label="GitHub verification">
-          <div className="st-panel-head">
-            <div>
-              <h2>GitHub verification</h2>
-              <p className="st-panel-desc">
-                Your proof starts with your repositories. The status below comes from the server — never from a guess.
-              </p>
-            </div>
-            <span className="st-panel-icon" aria-hidden="true">
-              <Github size={20} />
-            </span>
-          </div>
-          {c.github_handle ? (
-            <div className="st-kv">
-              <div className="st-kv-row">
-                <span>Handle</span>
-                <strong>{c.github_handle}</strong>
-              </div>
-              <div className="st-kv-row">
-                <span>Handle check</span>
-                <strong>
-                  {c.github_handle_exists === true
-                    ? "Found on GitHub"
-                    : c.github_handle_exists === false
-                      ? "Not found — check spelling"
-                      : "Not checked yet"}
-                </strong>
-              </div>
-              <div className="st-kv-row">
-                <span>Repo analysis</span>
-                <strong>
-                  {profile.github_verification.status === "checked"
-                    ? `Ran ${new Date(profile.github_verification.verified_at as string).toLocaleDateString()}`
-                    : "Hasn't run yet"}
-                </strong>
-              </div>
-              <div className="st-kv-row">
-                <span>Resume</span>
-                <strong>
-                  {profile.resumes.length > 0
-                    ? `${profile.resumes.length} uploaded`
-                    : "Not uploaded"}
-                </strong>
-              </div>
-            </div>
-          ) : (
-            <div className="st-empty-inline">
-              <span className="st-empty-icon" aria-hidden="true">
-                <Github size={22} />
-              </span>
-              <h3>No GitHub account linked yet</h3>
-              <p>Link your GitHub account so recruiters can see verified evidence of your work, not just claims.</p>
-              <Link href="/student/onboarding/github" className="st-btn st-btn-blue st-btn-sm">
-                Link GitHub <ArrowRight size={15} aria-hidden="true" />
-              </Link>
-            </div>
-          )}
-        </section>
+        {/* Online AI Monitoring (real stored data only) */}
+        <AiMonitoringCard profile={profile} />
       </div>
 
       {/* Applications */}

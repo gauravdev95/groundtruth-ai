@@ -9,10 +9,9 @@ import { cloudinaryConfigured } from "../config/env";
 import { CLOUDINARY_FOLDERS } from "../config/cloudinary";
 import { ApiError, asyncHandler } from "../middleware/errorHandler";
 import { requireAuth, requireRole, type AuthRequest } from "../middleware/auth";
-import { enqueueGithubAnalysis, enqueueResumeParsing } from "../queues/jobs";
+import { enqueueResumeParsing } from "../queues/jobs";
 import { uploadBuffer } from "../services/cloudinary";
 import {
-  checkGithubHandleExists,
   getOrCreateCandidateForUser,
   loadDashboard,
   loadFullProfile,
@@ -190,7 +189,7 @@ router.post(
 );
 
 // POST /api/student/profile/complete — finish onboarding. Requires the
-// mandatory sections (basic, GitHub, ≥1 project); otherwise 400 lists
+// mandatory sections (basic info + one project); otherwise 400 lists
 // exactly what is missing. Idempotent: re-completing is a no-op.
 router.post(
   "/profile/complete",
@@ -214,11 +213,12 @@ router.post(
   }),
 );
 
-// ── GitHub ─────────────────────────────────────────────────────────────────
-// PUT /api/student/profile/github — set handle/URL, best-effort public
-// lookup (does the handle exist on GitHub?), then enqueue the existing
-// repo analysis. A failed lookup never blocks the save: the status is
-// recorded as "not checked" instead of a guess.
+// ── GitHub (plain text field only) ────────────────────────────────────────
+// PUT /api/student/profile/github — set a GitHub username or profile URL as
+// plain text. NO verification: the handle is never checked against GitHub,
+// no "found / not found" status is recorded, and no repo-analysis worker
+// is enqueued from here. Any stale check state is cleared, so the profile
+// never shows a verification badge for this field.
 router.put(
   "/profile/github",
   asyncHandler(async (req, res) => {
@@ -233,25 +233,29 @@ router.put(
     }
     const candidate = await ownCandidate(req as AuthRequest);
     const raw = parsed.data.github_handle ?? parsed.data.github_url ?? "";
+    if (!raw.trim()) {
+      await pool.query(
+        `UPDATE candidates
+         SET github_handle = NULL, github_url = NULL, github_handle_exists = NULL,
+             github_checked_at = NULL, updated_at = now()
+         WHERE id = $1`,
+        [candidate.id],
+      );
+      res.json(await loadFullProfile(candidate.id));
+      return;
+    }
     const handle = parseGithubHandle(raw);
     if (!handle) {
       throw new ApiError(400, "Enter a GitHub username or a github.com profile URL");
     }
-    const exists = await checkGithubHandleExists(handle);
     const githubUrl = `https://github.com/${handle}`;
     await pool.query(
       `UPDATE candidates
-       SET github_handle = $1, github_url = $2, github_handle_exists = $3,
-           github_checked_at = now(), updated_at = now()
-       WHERE id = $4`,
-      [handle, githubUrl, exists, candidate.id],
+       SET github_handle = $1, github_url = $2, github_handle_exists = NULL,
+           github_checked_at = NULL, updated_at = now()
+       WHERE id = $3`,
+      [handle, githubUrl, candidate.id],
     );
-    // Background repo analysis (same worker as POST /api/candidates) — the
-    // result lands in verification_results; a queue failure never blocks.
-    await enqueueGithubAnalysis(githubUrl, candidate.id).catch((err) => {
-      console.error("[student] failed to enqueue github analysis", err);
-      return null;
-    });
     res.json(await loadFullProfile(candidate.id));
   }),
 );
@@ -400,6 +404,8 @@ type CrudConfig = {
   insertParams: (d: Record<string, unknown>) => unknown[];
   /** False for tables without an updated_at column (certificates). */
   hasUpdatedAt: boolean;
+  /** When true, a candidate may hold at most one row (projects). */
+  maxOne?: boolean;
 };
 
 function registerCrud(config: CrudConfig, route: string): void {
@@ -412,6 +418,18 @@ function registerCrud(config: CrudConfig, route: string): void {
         throw new ApiError(400, `Invalid ${config.label}: ${parsed.error.issues[0]?.message ?? "validation failed"}`);
       }
       const candidate = await ownCandidate(req as AuthRequest);
+      if (config.maxOne) {
+        const existing = await pool.query<{ count: string }>(
+          `SELECT count(*) AS count FROM ${config.table} WHERE candidate_id = $1`,
+          [candidate.id],
+        );
+        if (Number(existing.rows[0]?.count ?? 0) >= 1) {
+          throw new ApiError(
+            409,
+            `You can add only one ${config.label} — edit or replace your existing ${config.label} instead of adding another.`,
+          );
+        }
+      }
       const d = parsed.data as Record<string, unknown>;
       const params = config.insertParams(d);
       const placeholders = params.map((_, i) => `$${i + 2}`).join(", ");
@@ -475,6 +493,9 @@ registerCrud(
       d.technologies, d.started_at ?? null, d.ended_at ?? null,
     ],
     hasUpdatedAt: true,
+    // One project per student: the onboarding Projects stage and the
+    // profile page show a single selected project, edited or replaced.
+    maxOne: true,
   },
   "/projects",
 );

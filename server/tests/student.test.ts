@@ -47,7 +47,6 @@ test("completeness: empty profile scores 0 with all sections missing", () => {
   assert.equal(c.percent, 0);
   assert.deepEqual(c.missing, [
     "basic",
-    "github",
     "projects",
     "coding",
     "certificates",
@@ -55,7 +54,7 @@ test("completeness: empty profile scores 0 with all sections missing", () => {
   ]);
 });
 
-test("completeness: mandatory sections only score 75, not 100", () => {
+test("completeness: mandatory sections only score 70, not 100", () => {
   const c = computeCompleteness({
     candidate: FULL_CANDIDATE,
     skillCount: 3,
@@ -64,9 +63,8 @@ test("completeness: mandatory sections only score 75, not 100", () => {
     certificateCount: 0,
     experienceCount: 0,
   });
-  assert.equal(c.percent, 75);
+  assert.equal(c.percent, 70);
   assert.equal(c.sections.basic.done, true);
-  assert.equal(c.sections.github.done, true);
   assert.equal(c.sections.projects.done, true);
   assert.deepEqual(c.missing, ["coding", "certificates", "experience"]);
 });
@@ -95,12 +93,12 @@ test("completeness: basic needs headline/location/summary/education/role/skills"
     experienceCount: 0,
   });
   assert.equal(c.sections.basic.done, false);
-  assert.equal(c.percent, 50); // github 25 + projects 25
+  assert.equal(c.percent, 35); // projects 35 only
   assert.match(c.sections.basic.detail, /headline/);
 });
 
-test("completeness: mandatory sections are basic, github, projects", () => {
-  assert.deepEqual(MANDATORY_SECTIONS, ["basic", "github", "projects"]);
+test("completeness: mandatory sections are basic and projects (no GitHub)", () => {
+  assert.deepEqual(MANDATORY_SECTIONS, ["basic", "projects"]);
 });
 
 test("parseGithubHandle: plain handle, profile URL, trailing slash", () => {

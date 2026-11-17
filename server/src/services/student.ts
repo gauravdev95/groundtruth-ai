@@ -8,9 +8,15 @@ import { pool } from "../config/db";
  * onboarding flow writes: skills, projects, coding profiles, certificates,
  * experience, resumes, plus the applications/matches/jobs the dashboard
  * needs. Nothing here is invented: counts come from the tables, GitHub
- * verification comes from `verification_results` (written by the existing
- * github-analysis worker), and completeness is computed from what is
+ * verification (when a repo-analysis worker has run) comes from
+ * `verification_results`, and completeness is computed from what is
  * actually filled in — it is never stored, so it can never drift.
+ *
+ * NOTE: GitHub is NOT an onboarding section and is NOT verified during
+ * onboarding. The GitHub username is a plain optional text field on the
+ * profile page only — no verification check, no badge, no worker is
+ * triggered from onboarding. The `github_verification` field below is
+ * kept only because recruiter evidence views read it.
  */
 
 export interface CandidateRow {
@@ -182,7 +188,6 @@ export interface FullProfile {
 
 export type SectionKey =
   | "basic"
-  | "github"
   | "projects"
   | "coding"
   | "certificates"
@@ -203,22 +208,23 @@ export interface Completeness {
 }
 
 /**
- * Section weights (must add to 100). Basic/GitHub/Projects are the
- * mandatory onboarding stages in the old repo's flow, so they carry the
- * weight; coding/certificates/experience are optional stages and weigh
- * less. A student who skips every optional stage still finishes
- * onboarding — at 75%, not 100% — and the UI says exactly that.
+ * Section weights (must add to 100). Basic/Projects are the mandatory
+ * onboarding stages, so they carry the weight; coding/certificates/
+ * experience are optional stages and weigh less. GitHub used to hold 25
+ * points — it was removed as an onboarding section, and its weight was
+ * redistributed to basic (+10), projects (+10) and experience (+5). A
+ * student who skips every optional stage still finishes onboarding —
+ * at 70%, not 100% — and the UI says exactly that.
  */
 const SECTION_WEIGHTS: Record<SectionKey, number> = {
-  basic: 25,
-  github: 25,
-  projects: 25,
+  basic: 35,
+  projects: 35,
   coding: 10,
   certificates: 5,
-  experience: 10,
+  experience: 15,
 };
 
-export const MANDATORY_SECTIONS: SectionKey[] = ["basic", "github", "projects"];
+export const MANDATORY_SECTIONS: SectionKey[] = ["basic", "projects"];
 
 export function computeCompleteness(input: {
   candidate: Pick<
@@ -249,7 +255,6 @@ export function computeCompleteness(input: {
     c.graduation_year !== null &&
     c.target_roles.length > 0 &&
     input.skillCount > 0;
-  const githubDone = Boolean((c.github_handle ?? "").trim() || (c.github_url ?? "").trim());
   const projectsDone = input.projectCount > 0;
   const codingDone = input.codingCount > 0;
   const certificatesDone = input.certificateCount > 0;
@@ -257,7 +262,6 @@ export function computeCompleteness(input: {
 
   const doneMap: Record<SectionKey, boolean> = {
     basic: basicDone,
-    github: githubDone,
     projects: projectsDone,
     coding: codingDone,
     certificates: certificatesDone,
@@ -280,17 +284,11 @@ export function computeCompleteness(input: {
         ? "Headline, location, summary, education, target role and skills filled in."
         : `Add: ${missingBasic.join(", ")}.`,
     },
-    github: {
-      done: githubDone,
-      detail: githubDone
-        ? "GitHub account linked."
-        : "Link your GitHub account.",
-    },
     projects: {
       done: projectsDone,
       detail: projectsDone
-        ? `${input.projectCount} project${input.projectCount === 1 ? "" : "s"} added.`
-        : "Add at least one project.",
+        ? "Your one selected project added."
+        : "Add your one project.",
     },
     coding: {
       done: codingDone,
@@ -533,33 +531,9 @@ export async function loadDashboard(candidateId: string): Promise<DashboardData>
   };
 }
 
-/**
- * Best-effort public GitHub lookup: does this handle exist? Uses the
- * unauthenticated public API (no token, no private data). Returns TRUE /
- * FALSE, or NULL when GitHub could not be reached — NULL means "not
- * checked", never a claim either way. Never throws.
- */
-export async function checkGithubHandleExists(handle: string): Promise<boolean | null> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
-    try {
-      const res = await fetch(`https://api.github.com/users/${encodeURIComponent(handle)}`, {
-        headers: { "User-Agent": "groundtruth-ai", Accept: "application/vnd.github+json" },
-        signal: controller.signal,
-      });
-      if (res.status === 200) return true;
-      if (res.status === 404) return false;
-      return null;
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch {
-    return null;
-  }
-}
-
-/** Extract a GitHub handle from a handle or a github.com URL. */
+/** Extract a GitHub handle from a handle or a github.com URL. Used only
+ * to normalise the plain-text GitHub field on the profile page — it does
+ * NOT check the handle against GitHub. */
 export function parseGithubHandle(input: string): string | null {
   const trimmed = input.trim().replace(/\/+$/, "");
   if (!trimmed) return null;

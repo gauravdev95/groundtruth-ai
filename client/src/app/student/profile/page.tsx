@@ -17,6 +17,10 @@ import {
 } from "lucide-react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { StudentPageHead, StudentShell } from "@/components/student/StudentShell";
+import {
+  AiMonitoringCard,
+  ProfileStrengthCard,
+} from "@/components/student/ProfileStrength";
 import { useStudentProfile } from "@/components/student/useStudentProfile";
 import {
   BasicInfoForm,
@@ -264,6 +268,11 @@ function ProfileContent() {
         </div>
       </div>
 
+      <div className="st-grid st-grid-2 st-section-gap">
+        <ProfileStrengthCard profile={profile} />
+        <AiMonitoringCard profile={profile} summary />
+      </div>
+
       <div className="st-stack st-section-gap">
         {/* Basic info */}
         <Section
@@ -285,10 +294,10 @@ function ProfileContent() {
           </div>
         </Section>
 
-        {/* GitHub */}
+        {/* GitHub (plain optional text — never verified) */}
         <Section
-          title="GitHub"
-          desc="The account your work is verified against."
+          title="GitHub (optional)"
+          desc="Your GitHub username, shown as a plain link on your profile. It is not verified here."
           icon={<Github size={20} />}
           onEdit={() => setEditGithub((v) => !v)}
           editing={editGithub}
@@ -296,30 +305,24 @@ function ProfileContent() {
         >
           {c.github_handle ? (
             <div className="st-kv">
-              <div className="st-kv-row"><span>Handle</span><strong>{c.github_handle}</strong></div>
+              <div className="st-kv-row"><span>Username</span><strong>{c.github_handle}</strong></div>
               <div className="st-kv-row">
-                <span>Handle check</span>
+                <span>Profile</span>
                 <strong>
-                  {c.github_handle_exists === true
-                    ? "Found on GitHub"
-                    : c.github_handle_exists === false
-                      ? "Not found — check spelling"
-                      : "Not checked yet"}
-                </strong>
-              </div>
-              <div className="st-kv-row">
-                <span>Repo analysis</span>
-                <strong>
-                  {profile.github_verification.status === "checked"
-                    ? `Ran ${new Date(profile.github_verification.verified_at as string).toLocaleDateString()}`
-                    : "Hasn't run yet"}
+                  {c.github_url ? (
+                    <a href={c.github_url} target="_blank" rel="noreferrer" style={{ color: "var(--blue)", fontWeight: 700 }}>
+                      {c.github_url}
+                    </a>
+                  ) : (
+                    "—"
+                  )}
                 </strong>
               </div>
             </div>
           ) : (
-            <EmptyList text="No GitHub account linked yet." action={
+            <EmptyList text="No GitHub username added yet — this is optional." action={
               <button type="button" className="st-btn st-btn-blue st-btn-sm" onClick={() => setEditGithub(true)}>
-                Link GitHub
+                Add GitHub username
               </button>
             } />
           )}
@@ -335,18 +338,18 @@ function ProfileContent() {
           <ResumeCard profile={profile} onSaved={setProfile} />
         </Section>
 
-        {/* Projects */}
+        {/* Your one project */}
         <Section
-          title="Projects"
-          desc="One to three repositories or described projects — the evidence your interviews build on."
+          title="Your project"
+          desc="Your one selected project — the evidence your interviews build on. Edit it or replace it; there is only ever one."
           icon={<FolderGit2 size={20} />}
           editing={false}
         >
           {profile.projects.length === 0 && !addingProject ? (
-            <EmptyList text="No projects added yet — add at least one to complete onboarding." />
+            <EmptyList text="No project selected yet — add your one project to complete onboarding." />
           ) : (
             <div className="st-list">
-              {profile.projects.map((p) => (
+              {profile.projects.slice(0, 1).map((p) => (
                 <div className="st-list-item" key={p.id}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <h3>{p.title}</h3>
@@ -382,7 +385,7 @@ function ProfileContent() {
                       <Pencil size={15} aria-hidden="true" /> Edit
                     </button>
                     <button type="button" className="st-icon-btn danger" onClick={() => void onDelete("project", p.id)}>
-                      <Trash2 size={15} aria-hidden="true" /> Delete
+                      <Trash2 size={15} aria-hidden="true" /> Replace
                     </button>
                   </div>
                 </div>
@@ -393,13 +396,13 @@ function ProfileContent() {
             <div style={{ marginTop: 14 }}>
               <ProjectForm onSaved={refreshed} onCancel={() => setAddingProject(false)} />
             </div>
-          ) : (
+          ) : profile.projects.length === 0 ? (
             <div style={{ marginTop: 14 }}>
               <button type="button" className="st-btn st-btn-outline st-btn-sm" onClick={() => { setAddingProject(true); setEditingProject(null); }}>
-                <Plus size={15} aria-hidden="true" /> Add project
+                <Plus size={15} aria-hidden="true" /> Add your project
               </button>
             </div>
-          )}
+          ) : null}
         </Section>
 
         {/* Coding profiles */}
