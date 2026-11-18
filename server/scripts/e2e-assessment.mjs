@@ -198,13 +198,13 @@ async function main() {
 
   // ── 7. Monitoring: duplicate + tab visibility + terminal ───────────────
   const ev1 = await call("POST", `/api/assessments/${asmId}/events`, studentToken, {
-    sessionId: SESSION_ID, clientEventId: `evt-${RUN}-1`, eventType: "tab_visibility_change",
-    metadata: { visible: false },
+    sessionId: SESSION_ID, clientEventId: `evt-${RUN}-1`, eventType: "tab_hidden",
+    metadata: {},
   });
   step("tab visibility event recorded", ev1.status === 201 || ev1.status === 200, `HTTP ${ev1.status}`);
   const evDup = await call("POST", `/api/assessments/${asmId}/events`, studentToken, {
-    sessionId: SESSION_ID, clientEventId: `evt-${RUN}-1`, eventType: "tab_visibility_change",
-    metadata: { visible: false },
+    sessionId: SESSION_ID, clientEventId: `evt-${RUN}-1`, eventType: "tab_hidden",
+    metadata: {},
   });
   step("duplicate event deduped (same client_event_id)", evDup.status === 200 || evDup.status === 409, `HTTP ${evDup.status}`);
   const exec = await call("POST", `/api/assessments/${asmId}/execution/run`, studentToken, {
