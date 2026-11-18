@@ -67,6 +67,17 @@ async function request<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Error from an authed API call, carrying the HTTP status so callers can
+ *  tell a 403 (e.g. a recruiter-only report) apart from other failures. */
+export class ApiHttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiHttpError";
+    this.status = status;
+  }
+}
+
 async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
   if (!token) throw new Error("You are signed out — please sign in again.");
@@ -83,7 +94,8 @@ async function authedRequest<T>(path: string, init: RequestInit = {}): Promise<T
     | { error?: string }
     | null;
   if (!res.ok) {
-    throw new Error(
+    throw new ApiHttpError(
+      res.status,
       (body as { error?: string } | null)?.error ??
         `Request failed: ${res.status}`,
     );
@@ -140,4 +152,616 @@ export function applyToJob(jobId: string): Promise<{
 export function fetchMyApplications(): Promise<Application[]> {
   return authedRequest<Application[]>("/api/applications/mine");
 }
+
+// ── Assessment system (/api/assessments) ──────────────────────────────────
+// Typed client for the assessment backend (migration 007). Field names
+// follow the server exactly: assessment/challenge/repo rows are snake_case
+// DB rows, while strength/evaluation/interview reports are camelCase.
+// Nothing here invents data — every value comes from the API response.
+
+export type AssessmentStatus =
+  | "draft"
+  | "ready"
+  | "active"
+  | "submitted"
+  | "evaluating"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface AssessmentRow {
+  id: string;
+  candidate_id: string;
+  repository_id: string | null;
+  project_id: string | null;
+  status: AssessmentStatus;
+  time_limit_minutes: number;
+  started_at: string | null;
+  submitted_at: string | null;
+  ended_at: string | null;
+  consent_given_at: string | null;
+  consent_version: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Present on POST / (create) only when the server knows the source. */
+  source?: string;
+}
+
+export interface RepoAnalysisResult {
+  id: string;
+  repository_id: string;
+  languages: unknown;
+  frameworks: string[];
+  dependencies: unknown[];
+  structure: Record<string, unknown>;
+  entry_points: string[];
+  tests: Record<string, unknown>;
+  api_endpoints: unknown[];
+  db_integrations: string[];
+  quality: Record<string, unknown>;
+  summary: string | null;
+  analyzed_by: string;
+  created_at: string;
+}
+
+export interface ChallengeRow {
+  id: string;
+  assessment_id: string;
+  title: string;
+  problem_statement: string;
+  /** Metadata object (never raw code). Rendered as key/value pairs. */
+  repo_context: Record<string, unknown>;
+  required_functionality: unknown[];
+  acceptance_criteria: unknown[];
+  difficulty: string;
+  deliverables: unknown[];
+  allowed_tools: unknown[];
+  time_limit_minutes: number;
+  /** Descriptions only — hidden test code is never sent by the server. */
+  test_strategy: Record<string, unknown>;
+  generated_by: string;
+  validation: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AssessmentDetail extends AssessmentRow {
+  challenge: ChallengeRow | null;
+  repoAnalysis: RepoAnalysisResult | null;
+}
+
+export interface StrengthRecommendation {
+  id: string;
+  title: string;
+  why: string;
+  action: string;
+  points: number;
+}
+
+export interface StrengthReport {
+  overall: number;
+  categories: {
+    skillCoverage: number;
+    projectEvidence: number;
+    experience: number;
+    resumeConsistency: number;
+    profileCompleteness: { score: number; detail: string };
+  };
+  missing: string[];
+  weakAreas: string[];
+  recommendations: StrengthRecommendation[];
+  suggestedSkills: string[];
+  aiAvailable: boolean;
+  aiSummary: string | null;
+}
+
+/** Stored profile_analyses row (snake_case, as the server returns it). */
+export interface ProfileAnalysisRow {
+  id: string;
+  candidate_id: string;
+  overall_score: number | string;
+  category_scores: StrengthReport["categories"] | Record<string, unknown>;
+  missing: string[];
+  weak_areas: string[];
+  recommendations: StrengthRecommendation[];
+  suggested_skills: string[];
+  ai_available: boolean;
+  ai_summary: string | null;
+  created_at: string;
+}
+
+export interface ProfileRecommendations {
+  recommendations: StrengthRecommendation[];
+  missing: string[];
+  weak_areas: string[];
+  suggested_skills: string[];
+  created_at: string;
+}
+
+export interface VerifiedSkill {
+  skill: string;
+  evidence: Record<string, unknown>;
+  verifiedAt: string;
+  assessmentId: string | null;
+}
+
+export interface VerifiedProfile {
+  candidateId: string;
+  fullName: string;
+  completionScore: number;
+  completionMissing: string[];
+  strengthScore: number | null;
+  strengthCategories: Record<string, unknown>;
+  verifiedSkills: VerifiedSkill[];
+  latestAssessment: {
+    id: string;
+    status: string;
+    challengeTitle: string | null;
+    overallScore: number | null;
+    testPassRate: number | null;
+    qualityIssues: string[];
+    submittedAt: string | null;
+  } | null;
+  interviewScore: number | null;
+  verificationStatus: string;
+  verificationDate: string | null;
+  evidence: Record<string, unknown>;
+}
+
+export interface MonitoringConsent {
+  version: string;
+  collected: string[];
+  purpose: string;
+  retentionDays: number;
+  recruiterVisibility: string;
+  given: { given_at: string; version?: string } | null;
+}
+
+export interface StartAssessmentResult {
+  assessment: AssessmentRow;
+  sessionId: string;
+  sandboxBackend: "unshare" | "disabled" | string;
+  executionSessionId: string;
+}
+
+export interface ExecutionSession {
+  id: string;
+  status: string;
+  sandbox_backend: string;
+  created_at: string;
+}
+
+export interface ExecutionStatus {
+  sandboxBackend: string;
+  reason: string;
+  workspace: string;
+}
+
+export interface RunResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  timedOut: boolean;
+  durationMs: number;
+  backend: string;
+  command: string[];
+  parsed?: { passed: number; failed: number; total: number; failures: string[] };
+}
+
+export interface TestCounts {
+  passed: number;
+  failed: number;
+  total: number;
+  failures?: string[];
+}
+
+export interface SubmitResult {
+  status: string;
+  snapshotVersion: number;
+  snapshotHash: string;
+  visibleTests: TestCounts;
+  hiddenTests: TestCounts;
+  assessment?: AssessmentRow;
+}
+
+export interface MonitoringSummary {
+  assessmentId: string;
+  durationSeconds: number | null;
+  activeSeconds: number | null;
+  idlePeriods: { start: string; end: string | null; seconds: number }[];
+  filesModified: string[];
+  filesCreated: string[];
+  filesDeleted: string[];
+  terminalCommands: number;
+  testRuns: { passed: number; failed: number; total: number; runs: number };
+  compileErrors: number;
+  submissionAttempts: number;
+  aiAssistantInteractions: number;
+  tabHiddenCount: number;
+  observations: string[];
+}
+
+export interface MonitoringEvent {
+  id?: string;
+  event_type: string;
+  file_path: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface MonitoringData {
+  status: string;
+  assessmentStatus: string;
+  summary: MonitoringSummary;
+  integrity: {
+    id?: string;
+    type?: string;
+    finding?: string;
+    severity?: string;
+    status?: string;
+    detail?: string;
+    created_at?: string;
+  }[];
+  events: MonitoringEvent[];
+}
+
+export interface EvaluationReport {
+  id: string;
+  assessmentId: string;
+  overallScore: number | null;
+  categoryScores: Record<string, number | null>;
+  evidence: Record<string, unknown>;
+  passedTests: string[];
+  failedTests: string[];
+  qualityIssues: string[];
+  securityFindings: string[];
+  improvements: string[];
+  strengths: string[];
+  weaknesses: string[];
+  confidence: number;
+  humanReviewRecommended: boolean;
+  aiAvailable: boolean;
+  qualitativeMethod: "llm" | "deterministic-heuristic";
+  status: string;
+}
+
+export interface InterviewRow {
+  id: string;
+  assessment_id: string | null;
+  candidate_id: string;
+  status: string;
+  score: number | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface InterviewQuestion {
+  id: string;
+  category: string;
+  question: string;
+  question_order?: number;
+  order?: number;
+}
+
+export interface AnswerResult {
+  evaluation: {
+    accuracy: number;
+    understanding: number;
+    depth: number;
+    relevance: number;
+    problemSolving: number;
+    method: string;
+    notes: string;
+  };
+  score: number;
+  followUp: InterviewQuestion | null;
+}
+
+export interface InterviewReport {
+  interviewId: string;
+  assessmentId: string | null;
+  finalScore: number | null;
+  transcript: {
+    category: string;
+    question: string;
+    answer: string | null;
+    score: number | null;
+    evaluation: Record<string, unknown> | null;
+  }[];
+  perQuestion: {
+    question: string;
+    category: string;
+    score: number | null;
+    evaluation: Record<string, unknown> | null;
+  }[];
+  strengths: string[];
+  knowledgeGaps: string[];
+  gaps?: string[];
+  learningAreas: string[];
+  evidence: Record<string, unknown>;
+}
+
+export interface MonitoringReportData {
+  assessmentId: string;
+  candidateId: string;
+  summary: MonitoringSummary;
+  integrityFindings: Record<string, unknown>[];
+  evaluation: EvaluationReport | null;
+  timeline: { at: string; type: string; file: string | null; metadata: Record<string, unknown> }[];
+}
+
+export type AssessmentSource = "profile_project" | "manual";
+export type TimeLimitMinutes = 30 | 45 | 60 | 90;
+
+/** Coerce an unknown[] (or anything else) into a string list for display. */
+export function toStrList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((v) => String(v));
+  if (value === null || value === undefined) return [];
+  return [String(value)];
+}
+
+/** "2026-11-18T10:00:00Z" → "18 Nov 2026, 10:00" (local time). */
+export function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Seconds → "1h 23m" / "45m 10s" / "32s". Null → "—". */
+export function formatDuration(totalSeconds: number | null | undefined): string {
+  if (totalSeconds === null || totalSeconds === undefined) return "—";
+  const s = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+// ── Profile strength ───────────────────────────────────────────────────────
+export function analyzeProfileStrength(): Promise<StrengthReport> {
+  return authedRequest<StrengthReport>("/api/assessments/profile/analyze", {
+    method: "POST",
+  });
+}
+
+export function fetchProfileStrength(): Promise<ProfileAnalysisRow> {
+  return authedRequest<ProfileAnalysisRow>("/api/assessments/profile/strength");
+}
+
+export function fetchProfileRecommendations(): Promise<ProfileRecommendations> {
+  return authedRequest<ProfileRecommendations>("/api/assessments/profile/recommendations");
+}
+
+export function fetchVerifiedProfile(): Promise<VerifiedProfile> {
+  return authedRequest<VerifiedProfile>("/api/assessments/profile/verified");
+}
+
+// ── Demo project + projects ────────────────────────────────────────────────
+export function fetchDemoProject(): Promise<{ files: Record<string, string> }> {
+  return authedRequest<{ files: Record<string, string> }>("/api/assessments/demo-project");
+}
+
+export function fetchAssessmentProjects(): Promise<{
+  projects: { id: string; title: string; description: string }[];
+  repositories: unknown[];
+}> {
+  return authedRequest("/api/assessments/projects");
+}
+
+export function analyzeRepository(
+  assessmentId: string,
+  files: { path: string; content: string }[],
+  repoUrl?: string,
+): Promise<RepoAnalysisResult> {
+  return authedRequest<RepoAnalysisResult>("/api/assessments/projects/analyze", {
+    method: "POST",
+    body: JSON.stringify({ assessmentId, files, ...(repoUrl ? { repoUrl } : {}) }),
+  });
+}
+
+// ── Assessments ────────────────────────────────────────────────────────────
+export function createAssessment(input: {
+  projectId?: string;
+  source: AssessmentSource;
+  timeLimitMinutes?: TimeLimitMinutes;
+}): Promise<AssessmentRow> {
+  return authedRequest<AssessmentRow>("/api/assessments", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function fetchAssessments(): Promise<AssessmentRow[]> {
+  return authedRequest<AssessmentRow[]>("/api/assessments");
+}
+
+export function fetchAssessment(id: string): Promise<AssessmentDetail> {
+  return authedRequest<AssessmentDetail>(`/api/assessments/${encodeURIComponent(id)}`);
+}
+
+export function fetchChallenge(id: string): Promise<ChallengeRow> {
+  return authedRequest<ChallengeRow>(`/api/assessments/${encodeURIComponent(id)}/challenge`);
+}
+
+export function generateChallenge(id: string): Promise<ChallengeRow> {
+  return authedRequest<ChallengeRow>(`/api/assessments/${encodeURIComponent(id)}/challenge/generate`, {
+    method: "POST",
+  });
+}
+
+export function fetchConsent(id: string): Promise<MonitoringConsent> {
+  return authedRequest<MonitoringConsent>(`/api/assessments/${encodeURIComponent(id)}/consent`);
+}
+
+export function giveConsent(id: string): Promise<AssessmentRow> {
+  return authedRequest<AssessmentRow>(`/api/assessments/${encodeURIComponent(id)}/consent`, {
+    method: "POST",
+    body: JSON.stringify({ agreed: true }),
+  });
+}
+
+export function startAssessment(
+  id: string,
+  sessionId: string,
+  initialFiles?: Record<string, string>,
+): Promise<StartAssessmentResult> {
+  return authedRequest<StartAssessmentResult>(`/api/assessments/${encodeURIComponent(id)}/start`, {
+    method: "POST",
+    body: JSON.stringify({ sessionId, ...(initialFiles ? { initialFiles } : {}) }),
+  });
+}
+
+// ── Lab files + monitoring events ──────────────────────────────────────────
+export function fetchAssessmentFiles(id: string): Promise<{ files: Record<string, string> }> {
+  return authedRequest<{ files: Record<string, string> }>(
+    `/api/assessments/${encodeURIComponent(id)}/files`,
+  );
+}
+
+export function saveAssessmentFile(
+  id: string,
+  path: string,
+  content: string,
+  sessionId: string,
+): Promise<{ path: string; linesAdded: number; linesRemoved: number }> {
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return authedRequest(`/api/assessments/${encodeURIComponent(id)}/files/${encoded}`, {
+    method: "PUT",
+    body: JSON.stringify({ content, sessionId }),
+  });
+}
+
+export function postAssessmentEvent(
+  id: string,
+  input: {
+    sessionId: string;
+    eventType: string;
+    filePath?: string | null;
+    metadata?: Record<string, unknown>;
+    clientEventId?: string;
+  },
+): Promise<{ recorded: boolean }> {
+  return authedRequest<{ recorded: boolean }>(`/api/assessments/${encodeURIComponent(id)}/events`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function fetchMonitoring(id: string): Promise<MonitoringData> {
+  return authedRequest<MonitoringData>(`/api/assessments/${encodeURIComponent(id)}/monitoring`);
+}
+
+// ── Execution ──────────────────────────────────────────────────────────────
+export function fetchExecutionSession(id: string): Promise<ExecutionSession> {
+  return authedRequest<ExecutionSession>(
+    `/api/assessments/${encodeURIComponent(id)}/execution/session`,
+  );
+}
+
+export function fetchExecutionStatus(id: string): Promise<ExecutionStatus> {
+  return authedRequest<ExecutionStatus>(
+    `/api/assessments/${encodeURIComponent(id)}/execution/status`,
+  );
+}
+
+export function runExecution(
+  id: string,
+  sessionId: string,
+  command: string[],
+): Promise<RunResult> {
+  return authedRequest<RunResult>(`/api/assessments/${encodeURIComponent(id)}/execution/run`, {
+    method: "POST",
+    body: JSON.stringify({ sessionId, command }),
+  });
+}
+
+export function testExecution(
+  id: string,
+  sessionId: string,
+  command?: string[],
+): Promise<RunResult> {
+  return authedRequest<RunResult>(`/api/assessments/${encodeURIComponent(id)}/execution/test`, {
+    method: "POST",
+    body: JSON.stringify({ sessionId, ...(command ? { command } : {}) }),
+  });
+}
+
+// ── Submission + evaluation ────────────────────────────────────────────────
+export function submitAssessment(id: string, sessionId: string): Promise<SubmitResult> {
+  return authedRequest<SubmitResult>(`/api/assessments/${encodeURIComponent(id)}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
+export function evaluateAssessment(id: string): Promise<EvaluationReport> {
+  return authedRequest<EvaluationReport>(`/api/assessments/${encodeURIComponent(id)}/evaluate`, {
+    method: "POST",
+  });
+}
+
+export function fetchEvaluation(id: string): Promise<EvaluationReport> {
+  return authedRequest<EvaluationReport>(`/api/assessments/${encodeURIComponent(id)}/evaluation`);
+}
+
+// ── Interview ──────────────────────────────────────────────────────────────
+export function generateInterview(
+  id: string,
+): Promise<{ interview: InterviewRow; questions: InterviewQuestion[] }> {
+  return authedRequest(`/api/assessments/${encodeURIComponent(id)}/interview/generate`, {
+    method: "POST",
+  });
+}
+
+export function fetchInterview(
+  interviewId: string,
+): Promise<{ interview: InterviewRow; questions: InterviewQuestion[] }> {
+  return authedRequest(`/api/assessments/interviews/${encodeURIComponent(interviewId)}`);
+}
+
+export function answerInterviewQuestion(
+  interviewId: string,
+  questionId: string,
+  answer: string,
+): Promise<AnswerResult> {
+  return authedRequest<AnswerResult>(
+    `/api/assessments/interviews/${encodeURIComponent(interviewId)}/answer`,
+    {
+      method: "POST",
+      body: JSON.stringify({ questionId, answer }),
+    },
+  );
+}
+
+export function fetchInterviewReport(interviewId: string): Promise<InterviewReport> {
+  return authedRequest<InterviewReport>(
+    `/api/assessments/interviews/${encodeURIComponent(interviewId)}/report`,
+  );
+}
+
+// ── Monitoring report (recruiter/admin only — the server returns 403 for
+//    anyone else; callers must surface that 403 honestly, never fake it). ──
+export function fetchMonitoringReport(id: string): Promise<MonitoringReportData> {
+  return authedRequest<MonitoringReportData>(
+    `/api/assessments/${encodeURIComponent(id)}/monitoring/report`,
+  );
+}
+
+/** WebSocket URL for the live terminal of one execution session. */
+export function executionTerminalWsUrl(executionSessionId: string): string | null {
+  const token = getToken();
+  if (!token) return null;
+  const httpUrl = API_URL.replace(/^http/, "ws");
+  return `${httpUrl}/ws/execution/${encodeURIComponent(executionSessionId)}/terminal?token=${encodeURIComponent(token)}`;
+}
+
+export { API_URL as ASSESSMENT_API_URL };
 

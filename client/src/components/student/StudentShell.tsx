@@ -46,6 +46,9 @@ export function StudentShell({ children }: { children: ReactNode }) {
             <Link href="/student/profile" className={linkClass("/student/profile")}>
               Profile
             </Link>
+            <Link href="/assessment" className={linkClass("/assessment")}>
+              Assessments
+            </Link>
             <Link href="/jobs" className={linkClass("/jobs")}>
               Jobs
             </Link>
