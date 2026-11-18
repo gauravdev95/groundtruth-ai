@@ -185,3 +185,17 @@
   .st-form-actions .st-actions-right { margin-left: 0; flex-direction: column; }
   .st-form-actions .st-btn { width: 100%; }
 }
+
+/* ── Phase 7: messaging ── */
+.st-thread-list { display: grid; gap: 12px; margin-top: 16px; }
+.st-thread-item { display: flex; gap: 14px; align-items: flex-start; text-decoration: none; color: inherit; }
+.st-thread-item:hover h3 { color: var(--blue); }
+.st-unread-badge { flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: #1e2bda; color: #fff; font-size: 12px; font-weight: 800; display: inline-grid; place-items: center; }
+.st-msg-list { display: grid; gap: 10px; margin-top: 16px; }
+.st-msg { max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.st-msg-mine { justify-self: end; background: #1e2bda; color: #fff; border-bottom-right-radius: 4px; }
+.st-msg-theirs { justify-self: start; background: #f0eff7; color: #17171c; border-bottom-left-radius: 4px; }
+.st-msg-meta { font-size: 11.5px; font-weight: 700; opacity: 0.75; margin-top: 6px; }
+.st-msg-form { display: flex; gap: 8px; margin-top: 18px; }
+.st-msg-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; font-size: 14px; font-family: inherit; }
+.st-msg-form input:focus { outline: 2px solid rgba(30, 43, 218, 0.35); border-color: #1e2bda; }

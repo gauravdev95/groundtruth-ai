@@ -765,3 +765,123 @@ export function executionTerminalWsUrl(executionSessionId: string): string | nul
 
 export { API_URL as ASSESSMENT_API_URL };
 
+// ── Phase 7: messaging, notifications, contact ────────────────────────────
+
+export interface Message {
+  id: string;
+  application_id: string;
+  sender_id: string;
+  sender_name: string | null;
+  sender_role: string | null;
+  body: string;
+  created_at: string;
+}
+
+export interface MessageThread {
+  application_id: string;
+  job_id: string;
+  job_title: string;
+  company_name: string | null;
+  candidate_id: string;
+  candidate_name: string;
+  application_status: string;
+  last_message: string | null;
+  last_message_at: string | null;
+  last_sender_id: string | null;
+  unread_count: number;
+}
+
+export interface ThreadDetail {
+  application_id: string;
+  job_id: string;
+  job_title: string;
+  company_name: string | null;
+  candidate_id: string;
+  candidate_name: string;
+  application_status: string;
+  messages: Message[];
+}
+
+/** The caller's message threads (one per application), newest first. */
+export function fetchMessageThreads(): Promise<MessageThread[]> {
+  return authedRequest<MessageThread[]>("/api/messages/threads");
+}
+
+/** One thread with its messages. Reading marks it read for the caller. */
+export function fetchThread(applicationId: string): Promise<ThreadDetail> {
+  return authedRequest<ThreadDetail>(
+    `/api/messages/threads/${encodeURIComponent(applicationId)}`,
+  );
+}
+
+/** Send a message in a thread the caller is a party to. */
+export function sendThreadMessage(
+  applicationId: string,
+  body: string,
+): Promise<Message> {
+  return authedRequest<Message>(
+    `/api/messages/threads/${encodeURIComponent(applicationId)}/messages`,
+    { method: "POST", body: JSON.stringify({ body }) },
+  );
+}
+
+export interface NotificationItem {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  link: string | null;
+  application_id: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+/** The signed-in user's notifications, newest first. */
+export function fetchNotifications(): Promise<NotificationItem[]> {
+  return authedRequest<NotificationItem[]>("/api/notifications");
+}
+
+/** Number of unread notifications for the signed-in user. */
+export function fetchUnreadCount(): Promise<{ unread: number }> {
+  return authedRequest<{ unread: number }>("/api/notifications/unread-count");
+}
+
+export function markNotificationRead(id: string): Promise<NotificationItem> {
+  return authedRequest<NotificationItem>(
+    `/api/notifications/${encodeURIComponent(id)}/read`,
+    { method: "PATCH" },
+  );
+}
+
+export function markAllNotificationsRead(): Promise<{ marked: number }> {
+  return authedRequest<{ marked: number }>("/api/notifications/mark-all-read", {
+    method: "POST",
+  });
+}
+
+/**
+ * Public contact / demo-request form. No email is sent from this form —
+ * the server stores the message for the team to review and reply to.
+ */
+export function submitContact(input: {
+  name: string;
+  email: string;
+  message: string;
+  source?: "contact_page" | "landing_demo";
+}): Promise<{ id: string; created_at: string; message: string }> {
+  return fetch(`${API_URL}/api/contact`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  }).then(async (res) => {
+    const body = (await res.json().catch(() => null)) as {
+      error?: string;
+    } | null;
+    if (!res.ok) {
+      throw new Error(body?.error ?? `Request failed: ${res.status}`);
+    }
+    return body as { id: string; created_at: string; message: string };
+  });
+}
+

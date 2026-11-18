@@ -3,6 +3,7 @@ import { ApiError } from "../middleware/errorHandler";
 import { chatJson, llmConfigured } from "./llm";
 import { loadAssessmentById } from "./assessments";
 import { listEvents, buildActivitySummary } from "./monitoring";
+import { notifyCandidate } from "./notifications";
 
 // ── Hybrid AI engineering evaluation ───────────────────────────────────────
 // Weights (fixed by the product spec): functional correctness 30%,
@@ -360,6 +361,13 @@ export async function evaluateAssessment(
     `UPDATE assessments SET status = 'completed', ended_at = now(), updated_at = now() WHERE id = $1`,
     [assessmentId],
   );
+  // Phase 7: the candidate's evaluation is complete — the report is ready.
+  await notifyCandidate(assessment.candidate_id, {
+    type: "assessment",
+    title: "Assessment report ready",
+    body: `Your assessment evaluation is complete — overall score ${overall}%. View the report for the full breakdown.`,
+    link: "/assessment",
+  });
   // Verified skills: only skills the candidate listed AND the assessment
   // evidenced (functional score >= 70 and the skill appears in the changed
   // code or challenge context). Never label untested skills verified.

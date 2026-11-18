@@ -15,6 +15,9 @@ import studentRouter from "./routes/student";
 import recruiterRouter from "./routes/recruiter";
 import uploadsRouter from "./routes/uploads";
 import assessmentsRouter from "./routes/assessments";
+import messagesRouter from "./routes/messages";
+import notificationsRouter from "./routes/notifications";
+import contactRouter from "./routes/contact";
 import { closeWorkers, workers } from "./workers";
 import { verifyAccessToken } from "./services/auth";
 import { runSandboxed, validateCommand } from "./services/execution";
@@ -34,6 +37,9 @@ app.use("/api/student", studentRouter);
 app.use("/api/recruiter", recruiterRouter);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/assessments", assessmentsRouter);
+app.use("/api/messages", messagesRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/contact", contactRouter);
 
 app.use(errorHandler);
 

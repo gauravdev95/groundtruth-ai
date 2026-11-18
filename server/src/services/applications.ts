@@ -6,6 +6,7 @@ import {
   type FullProfile,
 } from "./student";
 import { getOrCreateRecruiterForUser } from "./recruiter";
+import { notifyCandidate } from "./notifications";
 
 /**
  * Applications service — Phase 4 (jobs / matches / applications core flow).
@@ -334,6 +335,17 @@ export async function updateApplicationStatus(
        VALUES ($1, $2, $3, $4)`,
       [applicationId, previousStatus, status, userId],
     );
+    // Phase 7: tell the candidate their application moved. Best-effort —
+    // a failed notification insert never fails the status change itself.
+    await notifyCandidate(application.candidate_id, {
+      type: "application_status",
+      title: `Application update — ${application.job_title}`,
+      body: `Your application for “${application.job_title}”${
+        application.company_name ? ` at ${application.company_name}` : ""
+      } moved from ${previousStatus} to ${status}.`,
+      link: `/student/messages/${applicationId}`,
+      applicationId,
+    });
   }
   const updated = await pool.query<ApplicationRow>(
     `SELECT ${APPLICATION_COLUMNS} WHERE a.id = $1`,

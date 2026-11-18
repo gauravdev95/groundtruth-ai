@@ -14,6 +14,7 @@ import {
 } from "./execution";
 import { generateChallengeWithAI, validateChallenge } from "./challenge";
 import { getHiddenTests } from "./hiddenTests";
+import { notifyCandidate } from "./notifications";
 import { analyzeRepoTree, sanitizeForLlm, validateRepoAccess } from "./repoAnalysis";
 import { recordEvent } from "./monitoring";
 
@@ -761,6 +762,13 @@ export async function submitAssessment(opts: {
      WHERE id = $1 RETURNING *`,
     [opts.assessmentId],
   );
+  // Phase 7: the candidate's assessment is now being evaluated.
+  await notifyCandidate(opts.candidateId, {
+    type: "assessment",
+    title: "Assessment submitted",
+    body: "Your assessment was submitted and evaluation has started. You will be notified when the report is ready.",
+    link: "/assessment",
+  });
   return {
     assessment: updated.rows[0] as AssessmentRow,
     snapshotVersion: version,

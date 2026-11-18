@@ -90,6 +90,30 @@ function AccountContent() {
             : "Your recruiter dashboard — job posting and candidate review — arrives in a later phase."}
         </p>
       </div>
+
+      <div className="st-form" style={{ marginTop: 8 }}>
+        <Link
+          href="/account/notifications"
+          className="st-btn st-btn-outline st-btn-block"
+        >
+          Notifications
+          <ArrowRight size={17} aria-hidden="true" />
+        </Link>
+      </div>
+
+      <div style={{ marginTop: 24, textAlign: "center" }}>
+        <p className="st-hint">
+          <Link href="/terms">Terms of Service</Link>
+          {" · "}
+          <Link href="/privacy">Privacy Policy</Link>
+          {" · "}
+          <Link href="/dpdp">DPDP &amp; Data Rights</Link>
+          {" · "}
+          <Link href="/bias-audit">Bias Audit</Link>
+          {" · "}
+          <Link href="/contact">Contact</Link>
+        </p>
+      </div>
     </AuthShell>
   );
 }

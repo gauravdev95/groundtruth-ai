@@ -1,11 +1,14 @@
 """POST /match — cosine similarity over stored pgvector embeddings.
 
 If either side has no stored embedding, the endpoint returns 503 with an
-honest message — it never fabricates a score.
+honest message — it never fabricates a score. If the database itself is
+unreachable, it also returns 503 (dependency unavailable) instead of an
+unhandled 500.
 """
 
 import math
 
+import psycopg
 from fastapi import APIRouter, HTTPException
 
 from ..db import get_conn
@@ -25,15 +28,25 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 @router.post("/match", response_model=MatchResponse)
 def match(req: MatchRequest) -> MatchResponse:
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT owner_type, embedding::text, model FROM embeddings "
-                "WHERE (owner_type = 'candidate' AND owner_id = %s::uuid) "
-                "   OR (owner_type = 'job' AND owner_id = %s::uuid)",
-                (req.candidate_id, req.job_id),
-            )
-            rows = cur.fetchall()
+    # A dead/unreachable database is a dependency outage, not a bug in the
+    # request: answer 503 so callers (and the server's match proxy) can
+    # tell "try again later" apart from a 500. Previously the psycopg
+    # OperationalError escaped the handler and FastAPI returned 500.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT owner_type, embedding::text, model FROM embeddings "
+                    "WHERE (owner_type = 'candidate' AND owner_id = %s::uuid) "
+                    "   OR (owner_type = 'job' AND owner_id = %s::uuid)",
+                    (req.candidate_id, req.job_id),
+                )
+                rows = cur.fetchall()
+    except psycopg.Error as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Matching database unavailable — try again later.",
+        ) from exc
     by_type: dict[str, dict] = {row["owner_type"]: row for row in rows}
     missing = [t for t in ("candidate", "job") if t not in by_type]
     if missing:

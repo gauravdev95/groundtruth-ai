@@ -4,6 +4,7 @@ import { chatJson, llmConfigured } from "./llm";
 import { loadAssessmentById } from "./assessments";
 import { getEvaluation } from "./evaluation";
 import { listEvents } from "./monitoring";
+import { notifyCandidate } from "./notifications";
 
 // ── Personalised AI technical interview ────────────────────────────────────
 // Generated AFTER the coding assessment is evaluated, from the candidate's
@@ -472,6 +473,16 @@ export async function buildInterviewReport(
       interviewId,
     ],
   );
+  // Phase 7: the AI interview is complete — tell the candidate.
+  await notifyCandidate(candidateId, {
+    type: "interview",
+    title: "AI interview complete",
+    body:
+      finalScore === null
+        ? "Your AI interview is complete and the report is ready to view."
+        : `Your AI interview is complete — final score ${finalScore}. The full report is ready to view.`,
+    link: "/assessment",
+  });
   return report;
 }
 
