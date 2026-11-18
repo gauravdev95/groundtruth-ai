@@ -178,6 +178,13 @@
   .st-grid-2, .st-grid-3, .st-grid-4, .st-form-grid { grid-template-columns: 1fr; }
   .st-option-grid { grid-template-columns: 1fr; }
   .st-panel { padding: 20px; }
+  /* Phase 8: a 5-column table still bleeds ~11px past its card at 390px
+     (and the analytics funnel table, 8 columns, by ~220px) even with the
+     3rd column hidden. Let the card scroll horizontally instead of
+     letting the table poke past the card border — the table stays
+     reachable by swipe, the card edge stays intact. No-op on desktop:
+     content fits, no scrollbar appears. */
+  .st-panel { overflow-x: auto; }
   .st-user-meta { display: none; }
   .st-table th:nth-child(3), .st-table td:nth-child(3) { display: none; }
   .st-list-item { flex-direction: column; }

@@ -60,9 +60,17 @@
   justify-content: space-between; gap: 16px;
   box-shadow: 0 10px 30px rgba(8, 8, 10, 0.05);
 }
-.st-logo { display: flex; align-items: center; gap: 8px; font-family: var(--font-jakarta), "Plus Jakarta Sans", sans-serif; font-weight: 800; font-size: 20px; letter-spacing: -0.02em; }
+.st-logo { display: flex; align-items: center; gap: 8px; font-family: var(--font-jakarta), "Plus Jakarta Sans", sans-serif; font-weight: 800; font-size: 20px; letter-spacing: -0.02em; flex-shrink: 0; }
 .st-logo-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--blue2); display: grid; place-items: center; color: #fff; box-shadow: 0 6px 16px rgba(47, 75, 255, 0.35); }
-.st-nav-side { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.st-nav-side { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--muted); min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* Phase 8: on narrow screens the student nav (5 links + chip + log out)
+   and the recruiter nav (8 links + chip + log out) are wider than the
+   viewport. The row scrolls horizontally (swipe) instead of being clipped
+   by the page's overflow-x: hidden — every link stays reachable. The
+   scrollbar is hidden; the row never wraps, so "Post a job" stays on one
+   line. No-op on wide screens: content fits, nothing scrolls. */
+.st-nav-side::-webkit-scrollbar { display: none; }
+.st-nav-side > * { flex-shrink: 0; white-space: nowrap; }
 .st-nav-side .st-link { color: var(--blue); font-weight: 700; }
 
 /* ── Layout + card ── */
