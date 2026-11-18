@@ -11,7 +11,10 @@ import {
   createAssessment,
   listAssessments,
   analyzeRepository,
+  analyzePublicRepoUrl,
   getLatestRepoAnalysis,
+  loadRepositoryForAssessment,
+  toPublicRepository,
   generateChallengeFor,
   getChallengeFor,
   giveConsent,
@@ -245,6 +248,31 @@ router.post(
   }),
 );
 
+// Step 5: analyse a PUBLIC GitHub repo URL (read-only, no token, no OAuth).
+// A public URL must NOT return 409 — that status is kept only for flows
+// that genuinely need a connected GitHub account (private repos, the
+// github_account source).
+router.post(
+  "/projects/analyze-github-url",
+  requireRole("candidate"),
+  asyncHandler(async (req: AuthRequest, res) => {
+    const parsed = z
+      .object({ assessmentId: z.string().uuid(), repoUrl: z.string().min(1).max(500) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      throw new ApiError(400, parsed.error.issues.map((i) => i.message).join("; "));
+    }
+    const id = await candidateId(req);
+    res.json(
+      await analyzePublicRepoUrl({
+        assessmentId: parsed.data.assessmentId,
+        candidateId: id,
+        repoUrl: parsed.data.repoUrl,
+      }),
+    );
+  }),
+);
+
 // ── Assessments ────────────────────────────────────────────────────────────
 router.post(
   "/",
@@ -286,7 +314,10 @@ router.get(
     const repoAnalysis = assessment.repository_id
       ? await getLatestRepoAnalysis(assessment.repository_id)
       : null;
-    res.json({ ...assessment, challenge, repoAnalysis });
+    const repository = toPublicRepository(
+      await loadRepositoryForAssessment(req.params.id),
+    );
+    res.json({ ...assessment, challenge, repoAnalysis, repository });
   }),
 );
 

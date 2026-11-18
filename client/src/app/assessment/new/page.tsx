@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FlaskConical, FolderGit2 } from "lucide-react";
+import { FlaskConical, FolderGit2, Github } from "lucide-react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { StudentPageHead, StudentShell } from "@/components/student/StudentShell";
 import {
@@ -15,6 +15,7 @@ import {
 import {
   createAssessment,
   fetchDemoProject,
+  isValidGitHubRepoUrl,
   type TimeLimitMinutes,
 } from "@/lib/api";
 import { fetchProfile, type FullProfile } from "@/lib/student";
@@ -27,7 +28,9 @@ function NewAssessmentContent() {
   const [demoFileCount, setDemoFileCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [choice, setChoice] = useState<"profile_project" | "manual">("manual");
+  const [choice, setChoice] = useState<"profile_project" | "github_url" | "manual">("manual");
+  const [repoUrl, setRepoUrl] = useState("");
+  const [repoUrlError, setRepoUrlError] = useState<string | null>(null);
   const [timeLimit, setTimeLimit] = useState<TimeLimitMinutes>(60);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -56,6 +59,15 @@ function NewAssessmentContent() {
   }, []);
 
   async function onCreate() {
+    if (choice === "github_url") {
+      if (!isValidGitHubRepoUrl(repoUrl)) {
+        setRepoUrlError(
+          "Enter a public GitHub repository URL, e.g. https://github.com/octocat/Hello-World — private repos need a connected GitHub account, which is not set up yet.",
+        );
+        return;
+      }
+      setRepoUrlError(null);
+    }
     setCreating(true);
     setCreateError(null);
     try {
@@ -64,6 +76,7 @@ function NewAssessmentContent() {
         source: choice,
         timeLimitMinutes: timeLimit,
         ...(choice === "profile_project" && project ? { projectId: project.id } : {}),
+        ...(choice === "github_url" ? { repoUrl: repoUrl.trim() } : {}),
       });
       router.push(`/assessment/${assessment.id}/challenge`);
     } catch (err) {
@@ -88,8 +101,10 @@ function NewAssessmentContent() {
         <h2>Choose what the challenge is built from</h2>
         <p className="st-panel-desc">
           The challenge is generated from the code of the project you pick.
-          GitHub-based assessments are not available — connecting a GitHub
-          account is not set up yet, so only these two options are offered.
+          A public GitHub URL works without connecting any account — it is
+          fetched read-only. A GitHub-<em>account</em> source (private repos)
+          is not available yet, because connecting a GitHub account is not
+          set up.
         </p>
 
         <div className="st-option-grid" role="radiogroup" aria-label="Project source">
@@ -122,6 +137,23 @@ function NewAssessmentContent() {
           <button
             type="button"
             role="radio"
+            aria-checked={choice === "github_url"}
+            className={`st-option ${choice === "github_url" ? "selected" : ""}`}
+            onClick={() => setChoice("github_url")}
+          >
+            <span className="st-panel-icon" aria-hidden="true"><Github size={20} /></span>
+            <strong>Public GitHub repository URL</strong>
+            <span>
+              Paste a public repo URL — the challenge is built from that
+              repo&apos;s real code, and the Lab starts from a read-only copy
+              of it. No account connection needed; private repos are not
+              supported.
+            </span>
+          </button>
+
+          <button
+            type="button"
+            role="radio"
             aria-checked={choice === "manual"}
             className={`st-option ${choice === "manual" ? "selected" : ""}`}
             onClick={() => setChoice("manual")}
@@ -136,6 +168,42 @@ function NewAssessmentContent() {
             </span>
           </button>
         </div>
+
+        {choice === "github_url" ? (
+          <div style={{ marginTop: 16 }}>
+            <label htmlFor="github-repo-url" style={{ display: "block", fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
+              Public GitHub repository URL
+            </label>
+            <input
+              id="github-repo-url"
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="https://github.com/octocat/Hello-World"
+              value={repoUrl}
+              onChange={(e) => {
+                setRepoUrl(e.target.value);
+                setRepoUrlError(null);
+              }}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid var(--border, #d9d7e8)",
+                fontSize: 14,
+                background: "var(--surface, #fff)",
+                color: "var(--ink, #14121f)",
+              }}
+            />
+            <p className="st-panel-desc" style={{ marginTop: 6 }}>
+              Public repos only, up to 10 MB. The repo is fetched read-only
+              and never executed; the analysis report shows exactly what was
+              found.
+            </p>
+            {repoUrlError ? <InlineError message={repoUrlError} /> : null}
+          </div>
+        ) : null}
 
         {!project ? (
           <p style={{ marginTop: 16 }}>
@@ -177,7 +245,11 @@ function NewAssessmentContent() {
             type="button"
             className="st-btn st-btn-blue"
             onClick={onCreate}
-            disabled={creating || (choice === "profile_project" && !project)}
+            disabled={
+              creating ||
+              (choice === "profile_project" && !project) ||
+              (choice === "github_url" && !isValidGitHubRepoUrl(repoUrl))
+            }
           >
             {creating ? "Creating…" : "Create assessment & continue"}
           </button>

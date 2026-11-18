@@ -16,6 +16,11 @@ import { generateChallengeWithAI, validateChallenge } from "./challenge";
 import { getHiddenTests } from "./hiddenTests";
 import { notifyCandidate } from "./notifications";
 import { analyzeRepoTree, sanitizeForLlm, validateRepoAccess } from "./repoAnalysis";
+import {
+  fetchPublicRepoFiles,
+  parseGitHubRepoUrl,
+  type PublicRepoFetch,
+} from "./githubPublicRepo";
 import { recordEvent } from "./monitoring";
 
 // ── Assessment orchestration ───────────────────────────────────────────────
@@ -90,14 +95,26 @@ export async function createAssessment(opts: {
   if (![30, 45, 60, 90].includes(timeLimit)) {
     throw new ApiError(400, "time_limit_minutes must be 30, 45, 60 or 90");
   }
-  if (opts.source === "github_url" || opts.source === "github_account") {
-    // GitHub-based assessment requires a connected GitHub account (the
-    // profile itself does not). We do not have an OAuth connection in this
-    // repo yet, so a GitHub-based assessment cannot be created honestly.
+  if (opts.source === "github_account") {
+    // A GitHub-account-based assessment genuinely needs a connected GitHub
+    // account (OAuth) — we do not have one, so this stays a 409. A PUBLIC
+    // GitHub URL does NOT need it: see the github_url branch below.
     throw new ApiError(
       409,
-      "GitHub-based assessment requires a connected GitHub account, which is not set up yet. Choose your profile project or the demo project instead.",
+      "GitHub-account-based assessment requires a connected GitHub account, which is not set up yet. Choose your profile project, a public GitHub URL, or the demo project instead.",
     );
+  }
+  // Step 5: a public GitHub URL needs no connected account — it is fetched
+  // read-only through the public GitHub API, without any token.
+  let githubRepo: { owner: string; repo: string; url: string } | null = null;
+  if (opts.source === "github_url") {
+    githubRepo = opts.repoUrl ? parseGitHubRepoUrl(opts.repoUrl) : null;
+    if (!githubRepo) {
+      throw new ApiError(
+        400,
+        "repoUrl must be a public GitHub repository URL (https://github.com/<owner>/<repo>).",
+      );
+    }
   }
   const client = await pool.connect();
   try {
@@ -134,8 +151,12 @@ export async function createAssessment(opts: {
         opts.candidateId,
         projectId,
         opts.source,
-        opts.repoUrl ?? null,
-        opts.source === "manual" ? "groundtruth-assessment-demo" : null,
+        githubRepo ? githubRepo.url : (opts.repoUrl ?? null),
+        githubRepo
+          ? `${githubRepo.owner}/${githubRepo.repo}`
+          : opts.source === "manual"
+            ? "groundtruth-assessment-demo"
+            : null,
       ],
     );
     const assessment = await client.query(
@@ -274,6 +295,152 @@ export async function getLatestRepoAnalysis(
   return (res.rows[0] as RepoAnalysisResult | undefined) ?? null;
 }
 
+export interface AssessmentRepositoryRow {
+  id: string;
+  candidate_id: string;
+  project_id: string | null;
+  source: string;
+  repo_url: string | null;
+  repo_name: string | null;
+  default_branch: string | null;
+  commit_sha: string | null;
+  fetched_files: { path: string; content: string }[] | null;
+  fetched_at: string | null;
+  created_at: string;
+}
+
+/** The repository row behind an assessment (null when it has none). */
+export async function loadRepositoryForAssessment(
+  assessmentId: string,
+): Promise<AssessmentRepositoryRow | null> {
+  const assessment = await loadAssessmentById(assessmentId);
+  if (!assessment.repository_id) return null;
+  const res = await pool.query(
+    `SELECT * FROM assessment_repositories WHERE id = $1`,
+    [assessment.repository_id],
+  );
+  return (res.rows[0] as AssessmentRepositoryRow | undefined) ?? null;
+}
+
+/** Public (safe-to-send-to-the-browser) view of a repository row. */
+export function toPublicRepository(row: AssessmentRepositoryRow | null): {
+  source: string;
+  repo_url: string | null;
+  repo_name: string | null;
+  default_branch: string | null;
+  commit_sha: string | null;
+  fetched_at: string | null;
+} | null {
+  if (!row) return null;
+  return {
+    source: row.source,
+    repo_url: row.repo_url,
+    repo_name: row.repo_name,
+    default_branch: row.default_branch,
+    commit_sha: row.commit_sha,
+    fetched_at: row.fetched_at,
+  };
+}
+
+/** The fetched file tree stored at analysis time (null when not fetched). */
+export async function loadFetchedRepoFiles(
+  assessmentId: string,
+): Promise<Record<string, string> | null> {
+  const repo = await loadRepositoryForAssessment(assessmentId);
+  if (!repo?.fetched_files) return null;
+  const out: Record<string, string> = {};
+  for (const f of repo.fetched_files) out[f.path] = f.content;
+  return out;
+}
+
+export interface PublicRepoAnalysisResult {
+  analysis: RepoAnalysisResult;
+  repository: {
+    owner: string;
+    repo: string;
+    repoUrl: string;
+    defaultBranch: string;
+    commitSha: string | null;
+    fileCount: number;
+    totalBytes: number;
+    skippedFiles: number;
+  };
+}
+
+/**
+ * Step 5: analyse a PUBLIC GitHub repo URL for this assessment.
+ *
+ * Fetches the repo read-only via the public GitHub API (no token, no OAuth),
+ * stores the fetched file tree + commit SHA on the repository row (so the
+ * Lab can be seeded from it later without re-fetching), then runs the SAME
+ * deterministic analysis as analyzeRepository. Fetched code is never
+ * executed and never reaches an LLM raw — only sanitizeForLlm metadata.
+ */
+export async function analyzePublicRepoUrl(opts: {
+  assessmentId: string;
+  candidateId: string;
+  repoUrl: string;
+  fetchImpl?: typeof fetch;
+}): Promise<PublicRepoAnalysisResult> {
+  const assessment = await loadAssessmentForCandidate(
+    opts.assessmentId,
+    opts.candidateId,
+  );
+  if (!assessment.repository_id) {
+    throw new ApiError(409, "Assessment has no repository selected");
+  }
+  const repoRow = await loadRepositoryForAssessment(opts.assessmentId);
+  if (repoRow?.source !== "github_url") {
+    throw new ApiError(
+      409,
+      "This assessment was not created from a public GitHub URL — create a new assessment with a GitHub URL to analyse one.",
+    );
+  }
+  const parsed = parseGitHubRepoUrl(opts.repoUrl);
+  if (!parsed) {
+    throw new ApiError(
+      400,
+      "Not a valid public GitHub repository URL. Use https://github.com/<owner>/<repo>.",
+    );
+  }
+  const fetched: PublicRepoFetch = await fetchPublicRepoFiles(parsed.url, {
+    fetchImpl: opts.fetchImpl,
+  });
+  await pool.query(
+    `UPDATE assessment_repositories
+        SET repo_url = $2, repo_name = $3, default_branch = $4,
+            commit_sha = $5, fetched_files = $6, fetched_at = now()
+      WHERE id = $1`,
+    [
+      assessment.repository_id,
+      fetched.repoUrl,
+      `${fetched.owner}/${fetched.repo}`,
+      fetched.defaultBranch,
+      fetched.commitSha,
+      JSON.stringify(fetched.files),
+    ],
+  );
+  const analysis = await analyzeRepository({
+    assessmentId: opts.assessmentId,
+    candidateId: opts.candidateId,
+    files: fetched.files,
+    repoUrl: fetched.repoUrl,
+  });
+  return {
+    analysis,
+    repository: {
+      owner: fetched.owner,
+      repo: fetched.repo,
+      repoUrl: fetched.repoUrl,
+      defaultBranch: fetched.defaultBranch,
+      commitSha: fetched.commitSha,
+      fileCount: fetched.fileCount,
+      totalBytes: fetched.totalBytes,
+      skippedFiles: fetched.skippedFiles,
+    },
+  };
+}
+
 export interface ChallengeRow {
   id: string;
   assessment_id: string;
@@ -336,7 +503,11 @@ export async function generateChallengeFor(
     },
     functionality: (quality.functionality as string[]) ?? [],
   };
+  // Step 5: a GitHub-URL assessment has no profile project — the challenge
+  // is titled from the repo itself (owner/repo), not the demo project.
+  const repoRow = await loadRepositoryForAssessment(assessmentId);
   const projectTitle =
+    repoRow?.repo_name ??
     (await pool.query(
       `SELECT title FROM candidate_projects WHERE id = $1`,
       [assessment.project_id],
@@ -463,7 +634,26 @@ export async function startAssessment(opts: {
   if (!assessment.consent_given_at) {
     throw new ApiError(409, "Monitoring consent is required before starting");
   }
-  const files = opts.initialFiles ?? (await loadDemoProjectFiles().catch(() => ({})));
+  // Step 5: a GitHub-URL Lab is seeded from the fetched repo files
+  // (read-only copy stored at analysis time). Otherwise the demo project.
+  let files: Record<string, string>;
+  if (opts.initialFiles) {
+    files = opts.initialFiles;
+  } else {
+    const repoRow = await loadRepositoryForAssessment(opts.assessmentId);
+    if (repoRow?.source === "github_url") {
+      const fetched = await loadFetchedRepoFiles(opts.assessmentId);
+      if (!fetched) {
+        throw new ApiError(
+          409,
+          "This GitHub repository has not been fetched yet — analyse the repository first.",
+        );
+      }
+      files = fetched;
+    } else {
+      files = await loadDemoProjectFiles().catch(() => ({}));
+    }
+  }
   const dir = workspaceDirFor(opts.assessmentId);
   await prepareWorkspace(dir, files);
   const client = await pool.connect();

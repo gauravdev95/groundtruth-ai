@@ -572,8 +572,22 @@ function LabContent() {
               <p className="st-panel-desc">
                 The challenge is ready and consent is given. Starting opens the
                 workspace ({detail.time_limit_minutes} minutes from now) and
-                begins monitoring. The workspace starts from the demo project
-                files.
+                begins monitoring.{" "}
+                {detail.repository?.source === "github_url" ? (
+                  <>
+                    The workspace starts from a read-only copy of your public
+                    GitHub repository{" "}
+                    <strong style={{ color: "var(--ink)" }}>
+                      {detail.repository.repo_name ?? detail.repository.repo_url}
+                    </strong>
+                    {detail.repository.commit_sha
+                      ? ` (commit ${detail.repository.commit_sha.slice(0, 7)})`
+                      : ""}
+                    .
+                  </>
+                ) : (
+                  "The workspace starts from the demo project files."
+                )}
               </p>
               {startError ? <InlineError message={startError} /> : null}
               <p style={{ marginTop: 16 }}>
@@ -671,6 +685,18 @@ function LabContent() {
           <div className="as-lab-grid">
             <section className="st-panel" aria-label="Files">
               <h3>Files</h3>
+              {detail.repository?.source === "github_url" ? (
+                <p className="st-panel-desc" style={{ marginTop: 4 }}>
+                  Workspace source: your public GitHub repository{" "}
+                  <strong style={{ color: "var(--ink)" }}>
+                    {detail.repository.repo_name ?? detail.repository.repo_url}
+                  </strong>
+                  {detail.repository.commit_sha
+                    ? ` (commit ${detail.repository.commit_sha.slice(0, 7)})`
+                    : ""}
+                  {" "}— read-only copy fetched from GitHub.
+                </p>
+              ) : null}
               {sortedFiles.length === 0 ? (
                 <p className="st-panel-desc" style={{ marginTop: 8 }}>
                   No files yet — the workspace loads when the Lab starts.

@@ -227,6 +227,15 @@ export interface ChallengeRow {
 export interface AssessmentDetail extends AssessmentRow {
   challenge: ChallengeRow | null;
   repoAnalysis: RepoAnalysisResult | null;
+  /** Repository behind the assessment (Step 5: public GitHub URL repos). */
+  repository: {
+    source: string;
+    repo_url: string | null;
+    repo_name: string | null;
+    default_branch: string | null;
+    commit_sha: string | null;
+    fetched_at: string | null;
+  } | null;
 }
 
 export interface StrengthRecommendation {
@@ -489,7 +498,7 @@ export interface MonitoringReportData {
   timeline: { at: string; type: string; file: string | null; metadata: Record<string, unknown> }[];
 }
 
-export type AssessmentSource = "profile_project" | "manual";
+export type AssessmentSource = "profile_project" | "github_url" | "manual";
 export type TimeLimitMinutes = 30 | 45 | 60 | 90;
 
 /** Coerce an unknown[] (or anything else) into a string list for display. */
@@ -567,9 +576,40 @@ export function analyzeRepository(
   });
 }
 
+/** Step 5: analyse a public GitHub repo URL for an assessment (read-only, no token). */
+export function analyzeGitHubUrl(
+  assessmentId: string,
+  repoUrl: string,
+): Promise<{
+  analysis: RepoAnalysisResult;
+  repository: {
+    owner: string;
+    repo: string;
+    repoUrl: string;
+    defaultBranch: string;
+    commitSha: string | null;
+    fileCount: number;
+    totalBytes: number;
+    skippedFiles: number;
+  };
+}> {
+  return authedRequest("/api/assessments/projects/analyze-github-url", {
+    method: "POST",
+    body: JSON.stringify({ assessmentId, repoUrl }),
+  });
+}
+
+/** Client-side check for a public GitHub repo URL (server re-validates). */
+export function isValidGitHubRepoUrl(value: string): boolean {
+  return /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?(\.git)?\/?$/.test(
+    value.trim(),
+  );
+}
+
 // ── Assessments ────────────────────────────────────────────────────────────
 export function createAssessment(input: {
   projectId?: string;
+  repoUrl?: string;
   source: AssessmentSource;
   timeLimitMinutes?: TimeLimitMinutes;
 }): Promise<AssessmentRow> {

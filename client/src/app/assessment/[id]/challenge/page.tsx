@@ -16,6 +16,7 @@ import {
   Stepper,
 } from "@/components/assessment/shared";
 import {
+  analyzeGitHubUrl,
   analyzeRepository,
   fetchAssessment,
   fetchConsent,
@@ -81,6 +82,29 @@ function ChallengeContent() {
     setBusy("analyze");
     setStepError(null);
     try {
+      // Step 5: a GitHub-URL assessment is analysed from the public repo
+      // itself (read-only fetch on the server); the Lab is seeded from the
+      // same fetched copy. Demo/profile assessments keep the demo flow.
+      if (detail?.repository?.source === "github_url" && detail.repository.repo_url) {
+        const result = await analyzeGitHubUrl(id, detail.repository.repo_url);
+        setAnalysis(result.analysis);
+        setDetail((d) =>
+          d
+            ? {
+                ...d,
+                repository: d.repository
+                  ? {
+                      ...d.repository,
+                      repo_name: `${result.repository.owner}/${result.repository.repo}`,
+                      default_branch: result.repository.defaultBranch,
+                      commit_sha: result.repository.commitSha,
+                    }
+                  : d.repository,
+              }
+            : d,
+        );
+        return;
+      }
       // The Lab workspace always starts from the demo project's files (the
       // server loads them when the assessment starts), so the repo analysis
       // runs on those files. This is labelled as such below — never presented
@@ -178,6 +202,15 @@ function ChallengeContent() {
               : "Not given yet"}
           </Kv>
           <Kv label="Time limit">{detail.time_limit_minutes} minutes</Kv>
+          {detail.repository ? (
+            <Kv label="Repository">
+              {detail.repository.source === "github_url"
+                ? `${detail.repository.repo_name ?? detail.repository.repo_url ?? "GitHub URL"}${detail.repository.commit_sha ? ` @ ${detail.repository.commit_sha.slice(0, 7)}` : ""}`
+                : detail.repository.source === "manual"
+                  ? "Demo project"
+                  : (detail.repository.repo_name ?? detail.repository.source)}
+            </Kv>
+          ) : null}
         </div>
       </section>
 
@@ -186,11 +219,23 @@ function ChallengeContent() {
         <div className="st-panel-head">
           <div>
             <h2>1 · Repository analysis</h2>
-            <p className="st-panel-desc">
-              The analysis runs on the demo project&apos;s files — the same files
-              the Lab workspace starts from. It is labelled as the demo codebase,
-              never as your own repository.
-            </p>
+            {detail.repository?.source === "github_url" ? (
+              <p className="st-panel-desc">
+                The analysis runs on your public GitHub repository{" "}
+                <strong style={{ color: "var(--ink)" }}>{detail.repository.repo_name ?? detail.repository.repo_url}</strong>
+                {detail.repository.commit_sha
+                  ? ` (commit ${detail.repository.commit_sha.slice(0, 7)})`
+                  : ""}
+                {" "}— fetched read-only from GitHub, never executed. The Lab
+                workspace starts from the same read-only copy.
+              </p>
+            ) : (
+              <p className="st-panel-desc">
+                The analysis runs on the demo project&apos;s files — the same files
+                the Lab workspace starts from. It is labelled as the demo codebase,
+                never as your own repository.
+              </p>
+            )}
           </div>
           <span className="st-panel-icon" aria-hidden="true"><FlaskConical size={20} /></span>
         </div>
