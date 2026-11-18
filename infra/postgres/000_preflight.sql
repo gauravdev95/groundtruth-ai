@@ -218,6 +218,7 @@ BEGIN
       ('candidate_skills', 'updated_at', 'now()'),
       ('password_reset_tokens', 'id', 'gen_random_uuid()'),
       ('password_reset_tokens', 'created_at', 'now()'),
+      ('password_reset_tokens', 'updated_at', 'now()'),
       ('password_reset_tokens', 'attempt_count', '0'),
       ('recruiter_profiles', 'id', 'gen_random_uuid()'),
       ('recruiter_profiles', 'created_at', 'now()'),
@@ -254,6 +255,375 @@ BEGIN
       ('candidate_skills', 'proficiency'),
       ('candidate_skills', 'evidence_weight'),
       ('recruiter_profiles', 'company_name')
+    ) AS v(t, c)
+  LOOP
+    SELECT (is_nullable = 'YES') INTO v_is_nullable
+      FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = v_table AND column_name = v_col;
+    IF NOT FOUND OR v_is_nullable THEN CONTINUE; END IF;
+    BEGIN
+      EXECUTE format('ALTER TABLE public.%I ALTER COLUMN %I DROP NOT NULL', v_table, v_col);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: %.% drop-not-null skipped: %', v_table, v_col, SQLERRM;
+    END;
+  END LOOP;
+END $pf$;
+
+-- ═════════ ROUND 2 (2026-11-18, ~21:30 IST) — why Round 1 was not enough ══
+-- Live deploy dep-dbusfn0ae00c73ffeahg (commit a760c0e) ran 000 "ok" and
+-- then 001 still failed at the SAME place:
+--   CREATE INDEX idx_certificates_candidate ON certificates (candidate_id)
+--   → 42703 column "candidate_id" does not exist.
+-- Round 1 only repaired `candidate_skills`. It never checked the OTHER
+-- tables 001 indexes on candidate_id. Reproduced locally by running the
+-- OLD repo's own `alembic upgrade head` (head c5e83f107a4b) into a scratch
+-- DB and executing 001 statement by statement: statement 15
+-- (idx_certificates_candidate) is the first failure. The old schema
+-- overlaps the new one on these tables, all keyed by candidate_profile_id
+-- instead of candidate_id (and job_posting_id instead of job_id):
+--   certificates, interviews, applications, embeddings,
+--   interview_questions (007), messages + notifications (008).
+-- This section repairs all of them the same way Round 1 repaired
+-- candidate_skills: add the columns the new server writes, convert the
+-- old enum status columns to TEXT (values preserved), drop/set defaults
+-- on old NOT NULL columns the new server never provides, and add the
+-- UNIQUE constraints the new server's ON CONFLICT upserts require.
+-- Still a no-op on fresh and already-migrated databases: every statement
+-- is guarded by an information_schema existence check, and every repair
+-- swallows its own errors with a NOTICE instead of failing the file.
+
+-- ── certificates: candidate_id + upload columns 001 defines ─────────────
+-- Old table keys by candidate_profile_id and has NO candidate_id /
+-- cloudinary_url / public_id. The new server INSERTs certificates
+-- (candidate_id, title, cloudinary_url, public_id) and never provides
+-- `issuer`, which is NOT NULL in the old table.
+DO $pf$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'certificates'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS candidate_id UUID';
+    EXECUTE 'ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS cloudinary_url TEXT';
+    EXECUTE 'ALTER TABLE public.certificates ADD COLUMN IF NOT EXISTS public_id TEXT';
+    BEGIN
+      EXECUTE 'ALTER TABLE public.certificates ALTER COLUMN issuer DROP NOT NULL';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: certificates issuer drop-not-null skipped: %', SQLERRM;
+    END;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'preflight: certificates repair skipped: %', SQLERRM;
+END $pf$;
+
+-- ── interviews: candidate_id / job_id / score / scheduled_at + status ────
+-- Old table keys by candidate_profile_id, has NO job_id / score /
+-- scheduled_at / transcript, and `status` is the interview_status ENUM
+-- (pending/in_progress/evaluating/completed/failed) which rejects the
+-- new server's 'scheduled' / 'cancelled'. `time_limit_seconds` is NOT
+-- NULL with no default and the new server never provides it.
+DO $pf$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'interviews'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.interviews ADD COLUMN IF NOT EXISTS candidate_id UUID';
+    EXECUTE 'ALTER TABLE public.interviews ADD COLUMN IF NOT EXISTS job_id UUID';
+    EXECUTE 'ALTER TABLE public.interviews ADD COLUMN IF NOT EXISTS score NUMERIC(5, 2)';
+    EXECUTE 'ALTER TABLE public.interviews ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ';
+    EXECUTE 'ALTER TABLE public.interviews ADD COLUMN IF NOT EXISTS transcript TEXT';
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'interviews'
+        AND column_name = 'status' AND udt_name <> 'text'
+    ) THEN
+      EXECUTE 'ALTER TABLE public.interviews ALTER COLUMN status TYPE TEXT USING lower(status::text)';
+      RAISE NOTICE 'preflight: interviews.status converted to TEXT';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'interviews'
+        AND column_name = 'time_limit_seconds' AND column_default IS NULL
+    ) THEN
+      EXECUTE 'ALTER TABLE public.interviews ALTER COLUMN time_limit_seconds SET DEFAULT 0';
+    END IF;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'preflight: interviews repair skipped: %', SQLERRM;
+END $pf$;
+
+-- ── applications: candidate_id / job_id + status + snapshot default ──────
+-- Old table keys by (job_posting_id, candidate_profile_id), has NO
+-- candidate_id / job_id, and `status` is the application_status ENUM
+-- (applied/shortlisted/interview_scheduled/hired/rejected) which rejects
+-- the new server's 'reviewing' / 'interview' / 'offer' / 'withdrawn'.
+-- `evidence_snapshot` is NOT NULL with no DB default and the new server's
+-- INSERT INTO applications (candidate_id, job_id) never provides it.
+DO $pf$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'applications'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS candidate_id UUID';
+    EXECUTE 'ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS job_id UUID';
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'applications'
+        AND column_name = 'status' AND udt_name <> 'text'
+    ) THEN
+      EXECUTE 'ALTER TABLE public.applications ALTER COLUMN status TYPE TEXT USING lower(status::text)';
+      RAISE NOTICE 'preflight: applications.status converted to TEXT';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'applications'
+        AND column_name = 'evidence_snapshot' AND column_default IS NULL
+    ) THEN
+      EXECUTE $q$ALTER TABLE public.applications ALTER COLUMN evidence_snapshot SET DEFAULT '{}'::jsonb$q$;
+    END IF;
+    BEGIN
+      EXECUTE 'ALTER TABLE public.applications ADD CONSTRAINT applications_candidate_id_job_id_key UNIQUE (candidate_id, job_id)';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: applications unique skipped: %', SQLERRM;
+    END;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'preflight: applications repair skipped: %', SQLERRM;
+END $pf$;
+
+-- ── embeddings: owner_* / embedding / model + legacy NOT NULLs ───────────
+-- Old table is (entity_type ENUM, entity_id, vector Vector(768),
+-- model_version) with all four NOT NULL. The new server INSERTs
+-- embeddings (owner_type, owner_id, embedding, model) ON CONFLICT
+-- (owner_type, owner_id, model), so the new columns, the UNIQUE, and
+-- dropping NOT NULL on the legacy columns are all required. The old
+-- `vector` column is left alone (768-dim legacy rows stay readable).
+DO $pf$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'embeddings'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.embeddings ADD COLUMN IF NOT EXISTS owner_type TEXT';
+    EXECUTE 'ALTER TABLE public.embeddings ADD COLUMN IF NOT EXISTS owner_id UUID';
+    EXECUTE 'ALTER TABLE public.embeddings ADD COLUMN IF NOT EXISTS model TEXT';
+    BEGIN
+      EXECUTE 'ALTER TABLE public.embeddings ADD COLUMN IF NOT EXISTS embedding vector(1536)';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: embeddings.embedding skipped: %', SQLERRM;
+    END;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'preflight: embeddings repair skipped: %', SQLERRM;
+END $pf$;
+
+DO $pf$
+DECLARE
+  v_col TEXT; v_is_nullable BOOLEAN;
+BEGIN
+  FOR v_col IN
+    SELECT * FROM (VALUES ('entity_type'), ('entity_id'), ('vector'), ('model_version')) AS v(c)
+  LOOP
+    SELECT (is_nullable = 'YES') INTO v_is_nullable
+      FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'embeddings' AND column_name = v_col;
+    IF NOT FOUND OR v_is_nullable THEN CONTINUE; END IF;
+    BEGIN
+      EXECUTE format('ALTER TABLE public.embeddings ALTER COLUMN %I DROP NOT NULL', v_col);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: embeddings.% drop-not-null skipped: %', v_col, SQLERRM;
+    END;
+  END LOOP;
+END $pf$;
+
+DO $pf$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'embeddings'
+  ) THEN
+    BEGIN
+      EXECUTE 'ALTER TABLE public.embeddings ADD CONSTRAINT embeddings_owner_type_owner_id_model_key UNIQUE (owner_type, owner_id, model)';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: embeddings unique skipped: %', SQLERRM;
+    END;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'preflight: embeddings unique block skipped: %', SQLERRM;
+END $pf$;
+
+-- ── interview_questions (007): category / question / question_order ──────
+-- Old table is (interview_id, sequence, prompt, grounded_in,
+-- expected_signals). 007's CREATE TABLE is skipped and its index on
+-- (interview_id, question_order) fails; the new server INSERTs
+-- (interview_id, category, question, question_order) and never provides
+-- `sequence` / `prompt`, which are NOT NULL in the old table.
+DO $pf$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'interview_questions'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.interview_questions ADD COLUMN IF NOT EXISTS category TEXT';
+    EXECUTE 'ALTER TABLE public.interview_questions ADD COLUMN IF NOT EXISTS question TEXT';
+    EXECUTE 'ALTER TABLE public.interview_questions ADD COLUMN IF NOT EXISTS question_order INTEGER NOT NULL DEFAULT 0';
+    BEGIN
+      EXECUTE 'ALTER TABLE public.interview_questions ALTER COLUMN sequence DROP NOT NULL';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: interview_questions sequence drop-not-null skipped: %', SQLERRM;
+    END;
+    BEGIN
+      EXECUTE 'ALTER TABLE public.interview_questions ALTER COLUMN prompt DROP NOT NULL';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: interview_questions prompt drop-not-null skipped: %', SQLERRM;
+    END;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'preflight: interview_questions repair skipped: %', SQLERRM;
+END $pf$;
+
+-- ── messages (008): application_id / sender_id ───────────────────────────
+-- Old table is (conversation_id NOT NULL, sender_user_id, body, read_at).
+-- The new server INSERTs messages (application_id, sender_id, body) and
+-- 008 indexes (application_id, created_at) and (sender_id).
+DO $pf$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'messages'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS application_id UUID';
+    EXECUTE 'ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS sender_id UUID';
+    BEGIN
+      EXECUTE 'ALTER TABLE public.messages ALTER COLUMN conversation_id DROP NOT NULL';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: messages conversation_id drop-not-null skipped: %', SQLERRM;
+    END;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'preflight: messages repair skipped: %', SQLERRM;
+END $pf$;
+
+-- ── notifications (008): title / body / link / application_id / is_read ──
+-- Old table is (user_id, type notification_type ENUM, payload JSONB
+-- NOT NULL no default, read_at). The new server INSERTs notifications
+-- (user_id, type, title, body, link, application_id) with type values
+-- 'application_status' / 'message' / 'interview' / 'assessment' /
+-- 'job_match', none of which the old ENUM accepts.
+DO $pf$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'notifications'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS title TEXT';
+    EXECUTE 'ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS body TEXT';
+    EXECUTE 'ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS link TEXT';
+    EXECUTE 'ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS application_id UUID';
+    EXECUTE 'ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN NOT NULL DEFAULT false';
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'notifications'
+        AND column_name = 'type' AND udt_name <> 'text'
+    ) THEN
+      EXECUTE 'ALTER TABLE public.notifications ALTER COLUMN type TYPE TEXT USING lower(type::text)';
+      RAISE NOTICE 'preflight: notifications.type converted to TEXT';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'notifications'
+        AND column_name = 'payload' AND column_default IS NULL
+    ) THEN
+      EXECUTE $q$ALTER TABLE public.notifications ALTER COLUMN payload SET DEFAULT '{}'::jsonb$q$;
+    END IF;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'preflight: notifications repair skipped: %', SQLERRM;
+END $pf$;
+
+-- ── Round 2b: defaults the new server's INSERTs rely on ──────────────────
+-- The old tables' id / created_at / updated_at columns have NO database
+-- defaults (SQLAlchemy filled them client-side), and several old NOT NULL
+-- columns have no default either. The new server's raw-SQL INSERTs omit
+-- them all — e.g. INSERT INTO applications (candidate_id, job_id) omits
+-- id, status, applied_at, status_updated_at, created_at, updated_at.
+-- Verified by running those exact INSERTs against the repaired old
+-- schema: applications failed on job_posting_id, embeddings on id.
+-- Same loop shape as Round 1's defaults block; no-op where the default
+-- already exists or the column is absent.
+DO $pf$
+DECLARE
+  v_table TEXT; v_col TEXT; v_def TEXT;
+  v_has_default BOOLEAN;
+BEGIN
+  FOR v_table, v_col, v_def IN
+    SELECT * FROM (VALUES
+      ('applications', 'id', 'gen_random_uuid()'),
+      ('applications', 'created_at', 'now()'),
+      ('applications', 'updated_at', 'now()'),
+      ('applications', 'status', '''applied'''),
+      ('applications', 'applied_at', 'now()'),
+      ('applications', 'status_updated_at', 'now()'),
+      ('certificates', 'id', 'gen_random_uuid()'),
+      ('certificates', 'created_at', 'now()'),
+      ('certificates', 'updated_at', 'now()'),
+      ('certificates', 'position', '0'),
+      ('certificates', 'verification_status', '''UNVERIFIED''::verification_status'),
+      ('embeddings', 'id', 'gen_random_uuid()'),
+      ('embeddings', 'created_at', 'now()'),
+      ('embeddings', 'updated_at', 'now()'),
+      ('interviews', 'id', 'gen_random_uuid()'),
+      ('interviews', 'created_at', 'now()'),
+      ('interviews', 'updated_at', 'now()'),
+      ('interview_questions', 'id', 'gen_random_uuid()'),
+      ('interview_questions', 'created_at', 'now()'),
+      ('interview_questions', 'updated_at', 'now()'),
+      ('messages', 'id', 'gen_random_uuid()'),
+      ('messages', 'created_at', 'now()'),
+      ('notifications', 'id', 'gen_random_uuid()'),
+      ('notifications', 'created_at', 'now()')
+    ) AS v(t, c, d)
+  LOOP
+    SELECT (column_default IS NOT NULL)
+      INTO v_has_default
+      FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = v_table AND column_name = v_col;
+    IF NOT FOUND THEN CONTINUE; END IF;
+    BEGIN
+      IF NOT v_has_default THEN
+        EXECUTE format('ALTER TABLE public.%I ALTER COLUMN %I SET DEFAULT %s', v_table, v_col, v_def);
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'preflight: %.% default skipped: %', v_table, v_col, SQLERRM;
+    END;
+  END LOOP;
+END $pf$;
+
+-- ── Round 2c: old NOT NULL columns the new server never provides ─────────
+-- Legacy foreign keys (job_posting_id, candidate_profile_id) and legacy
+-- interview bookkeeping columns (grounding, rubric_version, stage,
+-- current_question_index, follow_up_count, candidate_comfort) are NOT NULL
+-- in the old tables with no default. The new server never writes them,
+-- so they must be nullable. Same loop shape as Round 1.
+DO $pf$
+DECLARE
+  v_table TEXT; v_col TEXT; v_is_nullable BOOLEAN;
+BEGIN
+  FOR v_table, v_col IN
+    SELECT * FROM (VALUES
+      ('applications', 'job_posting_id'),
+      ('applications', 'candidate_profile_id'),
+      ('certificates', 'candidate_profile_id'),
+      ('interviews', 'candidate_profile_id'),
+      ('interviews', 'grounding'),
+      ('interviews', 'rubric_version'),
+      ('interviews', 'stage'),
+      ('interviews', 'question_count'),
+      ('interviews', 'current_question_index'),
+      ('interviews', 'follow_up_count'),
+      ('interviews', 'candidate_comfort')
     ) AS v(t, c)
   LOOP
     SELECT (is_nullable = 'YES') INTO v_is_nullable
