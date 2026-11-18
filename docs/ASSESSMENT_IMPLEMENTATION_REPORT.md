@@ -10,7 +10,8 @@ was never touched. `client/src/app/page.tsx` (landing page) was never touched.
 | Commit | Content |
 |---|---|
 | `371491cb177465b8543fc1ae1a3b1ba15ecd81d3` | Backend phase: audit + architecture, migration 007, all server services, routes, WS terminal, demo project, E2E script (62/62 at push time) |
-| _(second commit, see git log)_ | Monitoring test suite (17 tests), E2E tab-event correction, this report |
+| `681a25c7310f138237b2b46cd126be6e8d6d9dd6` | Monitoring test suite (17 tests), E2E tab-event correction, implementation report |
+| `66169d063db4ea5850013ab67c27576892885d20` | Assessment frontend: 9 pages in Stratify light design, Monaco Live Lab + WS terminal, typed assessment API client, Assessments nav link, @monaco-editor/react 4.7.0 |
 
 ## How to run it (local)
 
@@ -37,17 +38,17 @@ Statuses: COMPLETED / PARTIALLY COMPLETED / BLOCKED / NOT STARTED.
 | Phase 1 — audit (`docs/ASSESSMENT_AUDIT.md`) | COMPLETED | — (document) | 50 KB audit of the repo at 6462b04: structure, packages, DB, auth, dashboards, profile/project workflows, GitHub, AI/LLM, deployment, verification gaps |
 | Phase 1 — architecture (`docs/ASSESSMENT_ARCHITECTURE.md`) | COMPLETED | — (document) | Target architecture + an **as-built note** reconciling 5 divergences (LLM lives in the Express server, not ai-service; no hardcoded `AI_MODEL`; `assessment_events` tables; synchronous execution; plural route file) |
 | Profile completion system | COMPLETED | E2E steps: profile 70%, one-project 409, onboarding complete; `npm test` student suite 7/7 | Reuses existing student profile/completeness (6462b04). Completeness ≠ verified ability — strength and verification are separate scores |
-| AI Profile Strength Engine | COMPLETED | `tests/strength.test.ts` (7 tests); E2E overall=34, 6 recommendations each with WHY | `server/src/services/strength.ts` — deterministic scoring + skill→project mapping; LLM refine only when configured; never fabricates (E2E asserts no invented skill) |
-| Project selection + repo analysis | COMPLETED | `tests/repoAnalysis.test.ts` (9 tests); E2E detects Python + rate limiter | `repoAnalysis.ts` — metadata-only analysis, never executes code; `sanitizeForLlm` strips injected instructions from README/comments (tested) |
-| AI Challenge Generation | COMPLETED | `tests/challenge.test.ts` (8 tests); E2E generates "Fix the rate-limiting bug…" | `challenge.ts` — task follows real repo gaps (no tests → add tests; rate limiter → fix bug); every criterion validated as observable behaviour; hidden tests never leave the server |
-| Live Engineering Lab | PARTIALLY COMPLETED | E2E 62/62 (files, Run, Test, submit, autosave); WS ready/pong/output + reconnect | Backend + APIs complete. **Frontend pages are being built by a follow-up agent** (Monaco Lab, hub, challenge, evaluation, interview, verified profile) — not yet in the repo at this commit |
+| AI Profile Strength Engine | COMPLETED | `tests/strength.test.ts` (6 tests); E2E overall=34, 6 recommendations each with WHY | `server/src/services/strength.ts` — deterministic scoring + skill→project mapping; LLM refine only when configured; never fabricates (E2E asserts no invented skill) |
+| Project selection + repo analysis | COMPLETED | `tests/repoAnalysis.test.ts` (8 tests); E2E detects Python + rate limiter | `repoAnalysis.ts` — metadata-only analysis, never executes code; `sanitizeForLlm` strips injected instructions from README/comments (tested) |
+| AI Challenge Generation | COMPLETED | `tests/challenge.test.ts` (9 tests); E2E generates "Fix the rate-limiting bug…" | `challenge.ts` — task follows real repo gaps (no tests → add tests; rate limiter → fix bug); every criterion validated as observable behaviour; hidden tests never leave the server |
+| Live Engineering Lab | COMPLETED | E2E 62/62 (files, Run, Test, submit, autosave); WS ready/pong/output + reconnect; client `npx tsc --noEmit` PASS, `npm run build` PASS (9 assessment routes emit) | Backend + APIs complete. Frontend landed in `66169d06`: Monaco Lab (`/assessment/[id]/lab`) with file explorer, debounced autosave (Saved/Saving/Error), Run/Test, live terminal WS (ping→pong, one reconnect then REST fallback), countdown, submit panel, AI-assistance panel labelled as monitoring-summary data (no fake chat), `tab_hidden`/`tab_visible` + `app_run` heartbeat + 5-min idle events, BLOCKED banner when `sandboxBackend: "disabled"` |
 | Code execution sandbox | COMPLETED | Sandbox probe (8 checks) + E2E escape tests (4/4) + `npm test` | `execution.ts` — `unshare` user+net+mount+pid namespaces, verified masking model (see §Security). Docker is NOT installed in this VM; the sandbox does not need it. `EXECUTION_SANDBOX=disabled` fails closed |
 | Live Assessment Monitoring | COMPLETED | `tests/monitoring.test.ts` (17 tests); E2E event/duplicate/tab/consent/report steps | `monitoring.ts` — `assessment_events` + typed side tables, dedupe by `client_event_id`, secret scrubbing, idle detection, integrity analysis (review indicators only, never auto-reject), 90-day retention purge |
 | Automated testing + submission | COMPLETED | E2E: snapshot v0/v1 hashes, visible 15/15, hidden 3/3 | `assessments.ts` submit — frozen versioned snapshot + SHA-256, visible then hidden tests in-sandbox, hidden test files injected at submit and removed again |
 | AI Engineering Evaluation | COMPLETED | E2E overallScore=76.7, functional=100 (real tests) | `evaluation.ts` — weights 30/20/20/15/15; functional ONLY from executed tests; deterministic heuristic (max 60, human-review flag) when no LLM; LLM qualitative review when configured |
 | AI Technical Interview | COMPLETED | E2E: 7 questions, answer scored 31.75, report with transcript | `interview.ts` — categories A–H, adaptive follow-up when score < 60, per-answer evaluation, interview score SEPARATE from coding score, text-based only |
 | Final Verified Engineering Profile | COMPLETED | E2E: status "Needs Improvement", 1 verified skill (Python) | `verified.ts` — Verified only when evaluation ≥ 70 AND interview ≥ 60 (or no interview) AND no blocking integrity finding; untested skills never labelled verified |
-| AI model integration | COMPLETED | `tests/llm.test.ts` (10 tests) | `llm.ts` — OpenAI-compatible client, env config (`AI_API_BASE_URL`/`AI_API_KEY`/`AI_MODEL`/`AI_TEMPERATURE`/`AI_MAX_TOKENS`), mock provider, token logging (no content), cost estimation, 30 s timeout, retry with backoff, rate limiting, `chatJson` schema validation. **No model name is hardcoded; no key is in the frontend or logs** |
+| AI model integration | COMPLETED | `tests/llm.test.ts` (8 tests) | `llm.ts` — OpenAI-compatible client, env config (`AI_API_BASE_URL`/`AI_API_KEY`/`AI_MODEL`/`AI_TEMPERATURE`/`AI_MAX_TOKENS`), mock provider, token logging (no content), cost estimation, 30 s timeout, retry with backoff, rate limiting, `chatJson` schema validation. **No model name is hardcoded; no key is in the frontend or logs** |
 | DB + APIs | COMPLETED | Migration applied 001–007 on Postgres 16 + pgvector (42 tables); `npm test` 81/81 | `infra/postgres/007_assessment.sql` (idempotent, additive only); `server/src/routes/assessments.ts` (33 routes) + WS `/ws/execution/:sessionId/terminal`; auth + ownership + zod validation + rate limits on all routes |
 | Demo project | COMPLETED | 15 tests, 14 pass, 1 intentional failure (`test_window_expires`) | `groundtruth-assessment-demo/` — Python stdlib auth API, one intentional bug (window never expires), one missing feature (no per-user limit), README documents both |
 | 7 prompt test scenarios | COMPLETED | E2E script covers all 7 (profile, repo, live coding, evaluation, interview, security, end-to-end) | `server/scripts/e2e-assessment.mjs` — 62 steps, 62 pass against the local server |
@@ -62,7 +63,18 @@ Statuses: COMPLETED / PARTIALLY COMPLETED / BLOCKED / NOT STARTED.
 | `npm test` (unit + DB, `gt_assessment_test`) | **81/81 PASS, 0 fail** (was 64/64 before the monitoring suite) |
 | Demo project (`python3 -m unittest discover -s tests`) | 15 tests, 14 pass, **1 intentional failure** (`test_window_expires` — the planted bug) |
 | E2E journey (`scripts/e2e-assessment.mjs` vs local server :4100, `AI_MOCK=true`) | **62/62 PASS** — register → profile → strength → demo project → repo analysis → challenge → consent → Lab (unshare) → fix → tests 15/15 → submit (hidden 3/3) → evaluation 76.7 → interview (7 Qs, final 31.75) → verified "Needs Improvement" → recruiter job → apply → monitoring report → 403 checks |
+| Client typecheck (`npx tsc --noEmit`, incl. assessment pages) | PASS (0 errors) |
+| Client production build (`npm run build`) | PASS — all 9 assessment routes emit (`/assessment`, `/assessment/new`, `/assessment/profile`, `/assessment/verified` static; `[id]/challenge|lab|evaluation|interview|report` dynamic) |
 | Sandbox probe (`detectSandbox`, plain `node`) | PASS — 8 checks: /proc hidden (server pid absent), /root /home /etc empty, parent dir shows only the probe workspace, outbound TCP connect fails |
+
+## Frontend notes (UI follows the real server where it differs from the brief)
+
+- `POST /projects/select` creates a new assessment; creation uses `POST /api/assessments` — `/projects/select` is unused by the UI.
+- `GET /api/assessments/:id` returns `{...assessment, challenge, repoAnalysis}`, not a bare row; `ChallengeRow` is snake_case (`problem_statement`, `repo_context` object, `test_strategy` `{visible[], hidden[]}` of descriptions only).
+- **Repo analysis runs on demo-project files for both sources.** The client has no file snapshot for a profile project (no GitHub fetch; the server cannot fetch it either) and `startAssessment` defaults the workspace to demo files. The UI labels this as the demo codebase, never as the student's own repo.
+- Interview generation requires status `completed` (409 before); `generate` is idempotent, so the page resumes an existing interview — but there is **no interview list endpoint**, so per-answer scores from a previous session are not visible after reload until the final report, and viewing the final report completes the interview server-side (noted in the UI).
+- Submit response has no `assessment` field (returns `{status, snapshotVersion, snapshotHash, visibleTests, hiddenTests}`); interview report field is `knowledgeGaps`, not `gaps`. Submit sets status `evaluating`; evaluate requires `evaluating`/`completed` and sets `completed`.
+- The server already records `file_modified`/`file_created` events inside `saveFile`, so the Lab does not double-post them.
 
 ## Security model (execution) — read before deploying
 
@@ -101,8 +113,8 @@ Statuses: COMPLETED / PARTIALLY COMPLETED / BLOCKED / NOT STARTED.
 
 | Item | Status | Reason / next step |
 |---|---|---|
-| **Live verification in the browser (login + assessment on Render)** | BLOCKED | There is still NO Render server service and `NEXT_PUBLIC_API_URL` is unset on the live client. The server-creation decision (create `groundtruth-ai-server` via API vs Gaurav in the dashboard) is still pending with the user since 17 Nov 23:58 IST. All verification above is local (Postgres + Redis on this VM). Do not claim live verification until the server exists, migrations run, and the E2E is re-run against it |
-| **Frontend pages (hub, Lab, evaluation, interview, verified)** | PARTIALLY COMPLETED | Backend + APIs complete; a follow-up agent is building the client pages in the Stratify LIGHT design now (fresh clone at 371491c). Nothing is pushed for the frontend yet |
+| **Live verification in the browser (login + assessment on Render)** | BLOCKED | There is still NO Render server service and `NEXT_PUBLIC_API_URL` is unset on the live client. The server-creation decision (create `groundtruth-ai-server` via API vs Gaurav in the dashboard) is still pending with the user since 17 Nov 23:58 IST. All verification above is local (Postgres + Redis on this VM). The frontend pages have NOT been run end-to-end against a live backend yet (create → analyse → generate → consent → start → run/test → submit → evaluate → interview → verified). Do not claim live verification until the server exists, migrations run, and the E2E is re-run against it |
+| **Frontend pages (hub, Lab, evaluation, interview, verified)** | COMPLETED (pushed `66169d06`) | 9 pages in the Stratify LIGHT design, typechecked + production build pass. Live browser E2E against a running server still pending — see the live-verification row above |
 | **Live AI (non-mock) calls** | NOT STARTED | No live key is set anywhere (by design). To use a real model, set `AI_API_BASE_URL`, `AI_API_KEY`, `AI_MODEL` on the server (never commit a key). With `AI_MOCK=true` or no key, the deterministic mock + capped heuristic run instead, and every report says so (`aiAvailable: false`, `qualitativeMethod: "deterministic-heuristic"`) |
 | **GitHub-based assessments** | NOT STARTED | `POST /api/assessments` with `source: "github_url"` / `"github_account"` returns 409 — GitHub connect was explicitly excluded ("do not implement git connect"). The UI must not offer it |
 | **Phase 7 (messaging/notifications/legal) + Phase 8 (responsive + final audit)** | NOT STARTED | Superseded by the assessment master prompt; the assessment frontend is the current work. Phase 8's responsive/final-audit pass should run after the frontend lands |
@@ -135,3 +147,14 @@ the LLM (its `.env.example` lists the vars only for deploy consistency).
 - `groundtruth-assessment-demo/` — demo project (13 files)
 - `.env.example` (root / server / ai-service), `server/package.json` (+`ws`),
   `package-lock.json`
+- `client/src/app/assessment/` — `layout.tsx`, `assessment.css`, `page.tsx`
+  (hub), `profile/page.tsx` (strength dashboard), `new/page.tsx` (project
+  selection), `verified/page.tsx`, `[id]/challenge/page.tsx` (analyse →
+  challenge → consent → Lab stepper), `[id]/lab/page.tsx` (Monaco Lab),
+  `[id]/evaluation/page.tsx`, `[id]/interview/page.tsx` (text-only),
+  `[id]/report/page.tsx` (monitoring report)
+- `client/src/components/assessment/shared.tsx` (StatusChip, ScoreBar,
+  loading/error/empty states, Stepper, Kv); `client/src/lib/api.ts` (typed
+  assessment calls + `ApiHttpError`); `client/src/components/student/StudentShell.tsx`
+  (Assessments nav link); `client/package.json` + `package-lock.json`
+  (+`@monaco-editor/react` 4.7.0)
