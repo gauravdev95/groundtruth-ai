@@ -1,0 +1,208 @@
+/* ── Stratify design system — student scope ─────────────────────────────
+   Same tokens as the approved landing page / auth pages (auth.css):
+   Plus Jakarta Sans headings + Manrope body, royal blue #1E2BDA / #2F4BFF,
+   near-black #08080A headlines, pale lavender-grey gradient, white cards,
+   soft blue shadows. Scoped under .st-student; shared buttons/inputs/
+   alerts come from auth.css (imported by the student layout). */
+
+.st-student {
+  min-height: 100vh;
+  font-family: var(--font-manrope), "Manrope", system-ui, sans-serif;
+  color: var(--ink);
+  background: linear-gradient(180deg, #fff 0%, #f3f3fa 38%, #eef0ff 62%, #f7f7fc 100%);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.st-student h1,
+.st-student h2,
+.st-student h3 {
+  font-family: var(--font-jakarta), "Plus Jakarta Sans", sans-serif;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 0;
+}
+
+.st-student p { margin: 0; }
+.st-student a { color: inherit; text-decoration: none; }
+.st-student button { font: inherit; }
+
+/* ── Shell: nav + page ── */
+.st-page { position: relative; z-index: 2; max-width: 1180px; margin: 0 auto; padding: 28px 22px 80px; }
+.st-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 22px 0 24px; animation: st-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.st-page-title { font-size: clamp(26px, 4vw, 34px); font-weight: 800; margin-top: 10px; }
+.st-page-title .blue { color: var(--blue2); }
+.st-page-sub { color: var(--muted); font-size: 15px; line-height: 1.6; font-weight: 500; margin-top: 8px; max-width: 560px; }
+.st-user-chip { display: flex; align-items: center; gap: 10px; }
+.st-user-chip .st-avatar { width: 40px; height: 40px; font-size: 14px; }
+.st-user-meta { text-align: right; }
+.st-user-name { font-weight: 800; font-size: 14px; }
+.st-user-role { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+
+/* ── Cards & grids ── */
+.st-grid { display: grid; gap: 18px; }
+.st-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.st-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.st-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.st-panel {
+  background: var(--card); border: 1px solid #e9e9f2; border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 26px;
+  animation: st-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.st-panel h2 { font-size: 19px; font-weight: 800; }
+.st-panel h3 { font-size: 16px; font-weight: 800; }
+.st-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.st-panel-desc { color: var(--muted); font-size: 13.5px; line-height: 1.6; font-weight: 500; margin-top: 6px; }
+.st-panel-icon {
+  width: 44px; height: 44px; border-radius: 12px; background: var(--blue-soft);
+  display: grid; place-items: center; color: var(--blue2); flex-shrink: 0;
+  box-shadow: 0 8px 20px rgba(47, 75, 255, 0.14);
+}
+.st-stack { display: grid; gap: 18px; }
+.st-section-gap { margin-top: 18px; }
+
+/* ── Stat cards ── */
+.st-stat { display: flex; flex-direction: column; gap: 4px; }
+.st-stat-num { font-family: var(--font-jakarta), "Plus Jakarta Sans", sans-serif; font-size: 34px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.st-stat-num .blue { color: var(--blue2); }
+.st-stat-label { color: var(--muted); font-size: 13px; font-weight: 700; }
+.st-stat-sub { color: var(--muted2); font-size: 12.5px; font-weight: 500; }
+
+/* ── Completeness meter ── */
+.st-meter { height: 10px; border-radius: 999px; background: #ececf4; overflow: hidden; margin-top: 14px; }
+.st-meter-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue2), var(--blue)); transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.st-meter-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.st-meter-pct { font-family: var(--font-jakarta), "Plus Jakarta Sans", sans-serif; font-size: 26px; font-weight: 800; color: var(--blue); }
+.st-check-list { display: grid; gap: 8px; margin-top: 16px; }
+.st-check-item { display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; font-weight: 600; color: var(--muted); line-height: 1.5; }
+.st-check-item svg { flex-shrink: 0; margin-top: 1px; }
+.st-check-item.done { color: var(--ink); }
+.st-check-item.done svg { color: #16a34a; }
+.st-check-item.pending svg { color: var(--muted2); }
+
+/* ── Stepper (onboarding) ── */
+.st-stepper { display: flex; gap: 0; margin: 22px 0 4px; overflow-x: auto; padding-bottom: 6px; }
+.st-step { flex: 1; min-width: 96px; position: relative; padding: 0 10px 0 0; }
+.st-step-dot {
+  width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line);
+  background: #fff; display: grid; place-items: center; font-size: 12.5px; font-weight: 800;
+  color: var(--muted2); position: relative; z-index: 1;
+}
+.st-step.done .st-step-dot { background: var(--blue2); border-color: var(--blue2); color: #fff; }
+.st-step.current .st-step-dot { border-color: var(--blue2); color: var(--blue); box-shadow: 0 0 0 4px rgba(47, 75, 255, 0.14); }
+.st-step::before { content: ""; position: absolute; top: 15px; left: 30px; right: 0; height: 2px; background: var(--line); }
+.st-step:last-child::before { display: none; }
+.st-step.done::before { background: var(--blue2); }
+.st-step-label { font-size: 12px; font-weight: 700; color: var(--muted); margin-top: 8px; line-height: 1.3; }
+.st-step.current .st-step-label { color: var(--ink); }
+.st-step-optional { font-size: 10.5px; font-weight: 700; color: var(--muted2); letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* ── Option cards (choose step) ── */
+.st-option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 20px; }
+.st-option {
+  text-align: left; background: #fff; border: 1.5px solid var(--line); border-radius: 18px;
+  padding: 20px; cursor: pointer; transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.st-option:hover { border-color: var(--blue2); }
+.st-option.selected { border-color: var(--blue2); background: var(--blue-soft); box-shadow: 0 8px 24px rgba(47, 75, 255, 0.12); }
+.st-option strong { font-family: var(--font-jakarta), "Plus Jakarta Sans", sans-serif; font-size: 16px; }
+.st-option span { font-size: 13px; color: var(--muted); font-weight: 500; line-height: 1.55; }
+
+/* ── Lists (projects, applications, jobs) ── */
+.st-list { display: grid; gap: 12px; margin-top: 16px; }
+.st-list-item {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+  border: 1px solid #eef0f6; border-radius: 14px; padding: 16px 18px; background: #fff;
+}
+.st-list-item h3 { font-size: 15.5px; font-weight: 800; }
+.st-list-item h3 a { color: var(--ink); }
+.st-list-item h3 a:hover { color: var(--blue); }
+.st-list-meta { color: var(--muted); font-size: 13px; font-weight: 500; margin-top: 4px; line-height: 1.55; }
+.st-list-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.st-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.st-chip {
+  display: inline-flex; align-items: center; background: #f2f2f6; color: var(--muted);
+  font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+}
+.st-chip-blue { background: var(--blue-soft); color: var(--blue); }
+.st-chip-green { background: #f0fdf4; color: #166534; }
+.st-chip-amber { background: #fffbeb; color: #92400e; }
+.st-chip-grey { background: #f2f2f6; color: var(--muted); }
+
+.st-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+.st-table th { text-align: left; color: var(--muted2); font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.st-table td { padding: 12px 10px; border-bottom: 1px solid #f0f0f5; font-weight: 500; vertical-align: top; }
+.st-table tr:last-child td { border-bottom: none; }
+.st-table a { color: var(--blue); font-weight: 700; }
+
+/* ── Empty states ── */
+.st-empty-inline { text-align: center; padding: 30px 18px; color: var(--muted); }
+.st-empty-inline .st-empty-icon { background: var(--blue-soft); color: var(--blue2); margin-bottom: 14px; }
+.st-empty-inline h3 { font-size: 16px; margin-bottom: 6px; }
+.st-empty-inline p { font-size: 13.5px; line-height: 1.6; font-weight: 500; max-width: 420px; margin: 0 auto 16px; }
+
+/* ── Forms (extends auth.css inputs) ── */
+.st-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.st-form-grid .st-field-full { grid-column: 1 / -1; }
+.st-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235a5b6b' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; cursor: pointer; }
+.st-textarea { min-height: 110px; padding: 12px 14px; resize: vertical; line-height: 1.6; }
+.st-checkbox-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.st-check-pill { display: inline-flex; align-items: center; gap: 7px; border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; background: #fff; }
+.st-check-pill input { display: none; }
+.st-check-pill.on { border-color: var(--blue2); background: var(--blue-soft); color: var(--blue); }
+.st-file-drop { border: 1.5px dashed #c7c9f5; border-radius: 14px; padding: 22px; text-align: center; background: #fbfbff; cursor: pointer; display: grid; gap: 6px; justify-items: center; }
+.st-file-drop:hover { border-color: var(--blue2); background: var(--blue-soft); }
+.st-file-drop strong { font-size: 14px; }
+.st-file-drop span { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.st-icon-btn { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--blue); font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 8px; border-radius: 8px; }
+.st-icon-btn:hover { background: var(--blue-soft); }
+.st-icon-btn.danger { color: #dc2626; }
+.st-icon-btn.danger:hover { background: #fef2f2; }
+.st-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+.st-form-actions .st-actions-right { display: flex; gap: 10px; margin-left: auto; }
+.st-note { font-size: 13px; color: var(--muted); font-weight: 500; line-height: 1.6; background: #f8f7ff; border: 1px solid #ececf6; border-radius: 12px; padding: 12px 14px; margin-top: 16px; }
+.st-note strong { color: var(--ink); }
+.st-kv-label { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted2); margin-bottom: 4px; }
+.st-profile-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.st-profile-head .st-avatar { width: 72px; height: 72px; font-size: 24px; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .st-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .st-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .st-page { padding: 20px 14px 56px; }
+  .st-grid-2, .st-grid-3, .st-grid-4, .st-form-grid { grid-template-columns: 1fr; }
+  .st-option-grid { grid-template-columns: 1fr; }
+  .st-panel { padding: 20px; }
+  /* Phase 8: a 5-column table still bleeds ~11px past its card at 390px
+     (and the analytics funnel table, 8 columns, by ~220px) even with the
+     3rd column hidden. Let the card scroll horizontally instead of
+     letting the table poke past the card border — the table stays
+     reachable by swipe, the card edge stays intact. No-op on desktop:
+     content fits, no scrollbar appears. */
+  .st-panel { overflow-x: auto; }
+  .st-user-meta { display: none; }
+  .st-table th:nth-child(3), .st-table td:nth-child(3) { display: none; }
+  .st-list-item { flex-direction: column; }
+  .st-form-actions { flex-direction: column-reverse; align-items: stretch; }
+  .st-form-actions .st-actions-right { margin-left: 0; flex-direction: column; }
+  .st-form-actions .st-btn { width: 100%; }
+}
+
+/* ── Phase 7: messaging ── */
+.st-thread-list { display: grid; gap: 12px; margin-top: 16px; }
+.st-thread-item { display: flex; gap: 14px; align-items: flex-start; text-decoration: none; color: inherit; }
+.st-thread-item:hover h3 { color: var(--blue); }
+.st-unread-badge { flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: #1e2bda; color: #fff; font-size: 12px; font-weight: 800; display: inline-grid; place-items: center; }
+.st-msg-list { display: grid; gap: 10px; margin-top: 16px; }
+.st-msg { max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.st-msg-mine { justify-self: end; background: #1e2bda; color: #fff; border-bottom-right-radius: 4px; }
+.st-msg-theirs { justify-self: start; background: #f0eff7; color: #17171c; border-bottom-left-radius: 4px; }
+.st-msg-meta { font-size: 11.5px; font-weight: 700; opacity: 0.75; margin-top: 6px; }
+.st-msg-form { display: flex; gap: 8px; margin-top: 18px; }
+.st-msg-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px; font-size: 14px; font-family: inherit; }
+.st-msg-form input:focus { outline: 2px solid rgba(30, 43, 218, 0.35); border-color: #1e2bda; }

@@ -1,0 +1,81 @@
+"""POST /match — cosine similarity over stored pgvector embeddings.
+
+If either side has no stored embedding, the endpoint returns 503 with an
+honest message — it never fabricates a score. If the database itself is
+unreachable, it also returns 503 (dependency unavailable) instead of an
+unhandled 500.
+"""
+
+import math
+
+import psycopg
+from fastapi import APIRouter, HTTPException
+
+from ..db import get_conn
+from ..schemas import MatchRequest, MatchResponse
+
+router = APIRouter()
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0 or nb == 0:
+        return 0.0
+    return dot / (na * nb)
+
+
+@router.post("/match", response_model=MatchResponse)
+def match(req: MatchRequest) -> MatchResponse:
+    # A dead/unreachable database is a dependency outage, not a bug in the
+    # request: answer 503 so callers (and the server's match proxy) can
+    # tell "try again later" apart from a 500. Previously the psycopg
+    # OperationalError escaped the handler and FastAPI returned 500.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT owner_type, embedding::text, model FROM embeddings "
+                    "WHERE (owner_type = 'candidate' AND owner_id = %s::uuid) "
+                    "   OR (owner_type = 'job' AND owner_id = %s::uuid)",
+                    (req.candidate_id, req.job_id),
+                )
+                rows = cur.fetchall()
+    except psycopg.Error as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Matching database unavailable — try again later.",
+        ) from exc
+    by_type: dict[str, dict] = {row["owner_type"]: row for row in rows}
+    missing = [t for t in ("candidate", "job") if t not in by_type]
+    if missing:
+        raise HTTPException(
+            status_code=503,
+            detail=f"No embedding stored for: {', '.join(missing)}. "
+            "Run vector re-embedding for both sides before matching.",
+        )
+    cand = by_type["candidate"]
+    job = by_type["job"]
+    # Parse the pgvector text form into floats. pgvector outputs vectors
+    # as "[0.1,0.2,...]" (brackets); a Postgres array cast outputs
+    # "{0.1,0.2,...}" (braces). Both forms occur depending on how the row
+    # was inserted, so strip either — the old code stripped only braces
+    # and crashed with ValueError (HTTP 500) on real bracket-form rows
+    # (found 23 Nov 2026: /match returned 500 after storing vectors via
+    # the Express worker's JSON-array insert).
+    def _parse_vector(value: object) -> list[float]:
+        raw = str(value).strip().strip("[]{}")
+        if not raw:
+            return []
+        return [float(v) for v in raw.split(",") if v.strip()]
+
+    cand_vec = _parse_vector(cand["embedding"])
+    job_vec = _parse_vector(job["embedding"])
+    score = _cosine(cand_vec, job_vec)
+    return MatchResponse(
+        candidate_id=req.candidate_id,
+        job_id=req.job_id,
+        score=score,
+        model=str(cand["model"]),
+    )
